@@ -102,7 +102,7 @@ class _HomeSectionState extends State<HomeSection> {
                   height: 37,
                   decoration: BoxDecoration(
                     image: const DecorationImage(
-                      image: NetworkImage("https://placehold.co/37x37"),
+                      image: AssetImage('assets/Silkreto-Logo.png'),
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -169,7 +169,7 @@ class _HomeSectionState extends State<HomeSection> {
                   height: 90,
                   decoration: const BoxDecoration(
                     image: DecorationImage(
-                      image: NetworkImage("https://placehold.co/107x90"),
+                      image: AssetImage('assets/Silkreto-Logo.png'),
                       fit: BoxFit.fill,
                     ),
                   ),
