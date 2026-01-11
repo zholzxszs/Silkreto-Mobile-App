@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class HomeSection extends StatefulWidget {
@@ -16,6 +17,7 @@ class _HomeSectionState extends State<HomeSection> {
   @override
   void initState() {
     super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _scrollController.addListener(_onScroll);
   }
 
@@ -38,6 +40,8 @@ class _HomeSectionState extends State<HomeSection> {
       Navigator.of(context).pushNamed('/upload');
     } else if (index == 3) {
       Navigator.of(context).pushNamed('/history');
+    } else if (index == 4) {
+      Navigator.of(context).pushNamed('/manual');
     } else if (index == 0) {
       Navigator.of(context).pushReplacementNamed('/home');
     }
@@ -45,6 +49,10 @@ class _HomeSectionState extends State<HomeSection> {
 
   @override
   void dispose() {
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
@@ -53,71 +61,69 @@ class _HomeSectionState extends State<HomeSection> {
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
-    final isSmallScreen = screenSize.width < 380;
-    final contentWidth = isSmallScreen ? screenSize.width * 0.95 : 380.0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
-      body: SingleChildScrollView(
-        controller: _scrollController,
-        child: Center(
-          child: Container(
-            width: contentWidth,
-            constraints: BoxConstraints(minHeight: screenSize.height),
-            padding: const EdgeInsets.symmetric(horizontal: 0),
-            decoration: const BoxDecoration(color: Color(0xFFF5F5F5)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top Header Bar
-                _buildHeader(contentWidth),
-                const SizedBox(height: 28),
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            controller: _scrollController,
+            child: Container(
+              width: screenSize.width,
+              constraints: BoxConstraints(minHeight: screenSize.height),
+              padding: EdgeInsets.zero,
+              decoration: const BoxDecoration(color: Color(0xFFF5F5F5)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top Header Bar
+                  _buildHeader(screenSize.width),
+                  const SizedBox(height: 28),
 
-                // Weather Card
-                _buildWeatherCard(contentWidth),
-                const SizedBox(height: 30),
+                  // Weather Card
+                  _buildWeatherCard(screenSize.width),
+                  const SizedBox(height: 30),
 
-                // Explore Section
-                _buildSectionTitle('Explore'),
-                const SizedBox(height: 12),
+                  // Explore Section
+                  _buildSectionTitle('Explore'),
+                  const SizedBox(height: 12),
 
-                // Explore Cards Grid
-                _buildExploreGrid(contentWidth),
-                const SizedBox(height: 40),
+                  // Explore Cards Grid
+                  _buildExploreGrid(screenSize.width),
+                  const SizedBox(height: 40),
 
-                // Analytics Section
-                _buildSectionTitle('Analytics'),
-                const SizedBox(height: 12),
+                  // Analytics Section
+                  _buildSectionTitle('Analytics'),
+                  const SizedBox(height: 12),
 
-                // Year Dropdown
-                _buildYearDropdown(contentWidth),
-                const SizedBox(height: 12),
+                  // Year Dropdown
+                  _buildYearDropdown(screenSize.width),
+                  const SizedBox(height: 12),
 
-                // Line Graph Card
-                _buildLineGraphCard(contentWidth),
-                const SizedBox(height: 40),
+                  // Line Graph Card
+                  _buildLineGraphCard(screenSize.width),
+                  const SizedBox(height: 40),
 
-                // All Months Section
-                _buildSectionTitle('All Months'),
-                const SizedBox(height: 12),
+                  // All Months Section - Updated
+                  _buildAllMonthsSection(screenSize.width),
 
-                // Month Cards
-                _buildMonthCard('November', 60, 35, 5, contentWidth),
-                const SizedBox(height: 12),
-                _buildMonthCard('October', 60, 35, 5, contentWidth),
-                const SizedBox(height: 12),
-                _buildMonthCard('September', 60, 35, 5, contentWidth),
-                const SizedBox(height: 12),
-                _buildMonthCard('August', 60, 35, 5, contentWidth),
-                const SizedBox(height: 60),
-
-                // Bottom Navigation
-                _buildBottomNavigation(contentWidth),
-                const SizedBox(height: 20),
-              ],
+                  // Placeholder for floating nav space
+                  const SizedBox(height: 95),
+                ],
+              ),
             ),
           ),
-        ),
+          // Floating Bottom Navigation - UPDATED
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            bottom: _navVisible
+                ? MediaQuery.of(context).padding.bottom + 35
+                : -100,
+            left: 42,
+            right: 42,
+            child: _buildBottomNavigation(screenSize.width),
+          ),
+        ],
       ),
     );
   }
@@ -125,7 +131,7 @@ class _HomeSectionState extends State<HomeSection> {
   Widget _buildHeader(double width) {
     return Container(
       width: width,
-      height: 55,
+      height: 60,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment(0.50, 0.00),
@@ -144,25 +150,12 @@ class _HomeSectionState extends State<HomeSection> {
       child: Row(
         children: [
           const SizedBox(width: 16),
-          // Profile Avatar
-          Container(
-            width: 37,
-            height: 37,
-            decoration: BoxDecoration(
-              image: const DecorationImage(
-                image: AssetImage('assets/Silkreto-Logo.png'),
-                fit: BoxFit.cover,
-              ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-          const SizedBox(width: 8),
           // SILKRETO Title
           Text(
             'SILKRETO',
             style: GoogleFonts.nunito(
               color: Colors.white,
-              fontSize: 18,
+              fontSize: 24,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.90,
             ),
@@ -170,13 +163,13 @@ class _HomeSectionState extends State<HomeSection> {
           const Spacer(),
           // Notification Icon
           Container(
-            width: 18,
-            height: 18,
+            width: 26,
+            height: 26,
             margin: const EdgeInsets.only(right: 16),
             child: const Icon(
               Icons.notifications_none,
               color: Colors.white,
-              size: 18,
+              size: 26,
             ),
           ),
         ],
@@ -187,8 +180,8 @@ class _HomeSectionState extends State<HomeSection> {
   Widget _buildWeatherCard(double width) {
     return Container(
       width: width - 42,
-      height: 125,
-      margin: EdgeInsets.symmetric(horizontal: width * 0.055),
+      height: 130,
+      margin: const EdgeInsets.symmetric(horizontal: 21),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment(0.50, -0.00),
@@ -207,16 +200,25 @@ class _HomeSectionState extends State<HomeSection> {
       ),
       child: Stack(
         children: [
-          // Weather Image
-          Positioned(
-            left: (width - 42) * 0.4,
-            top: 14,
-            child: SizedBox(
-              width: 107,
-              height: 90,
-              child: Image.asset(
-                'assets/Silkreto-Logo.png',
-                fit: BoxFit.contain,
+          // Weather Image (centered)
+          Positioned.fill(
+            child: Align(
+              alignment: const Alignment(0.35, 0),
+              child: SizedBox(
+                width: 167,
+                height: 150,
+                child: Image.asset(
+                  'assets/weather-clouds/sunny-cloudy.png',
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: Colors.grey[200],
+                    child: const Icon(
+                      Icons.cloud,
+                      size: 40,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -289,35 +291,43 @@ class _HomeSectionState extends State<HomeSection> {
           // Temperature
           Positioned(
             right: 14,
-            top: 11,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '29°C',
-                  textAlign: TextAlign.right,
-                  style: GoogleFonts.nunito(
-                    color: const Color(0xFF5B532C),
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    height: 1.37,
+            top: 11, // top for 29°C
+            bottom: 14, // bottom for Sunny + Feels like
+            child: SizedBox(
+              height:
+                  130 - 25, // container height minus padding, adjust if needed
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Top: Temperature
+                  Text(
+                    '29°C',
+                    textAlign: TextAlign.right,
+                    style: GoogleFonts.nunito(
+                      color: const Color(0xFF5B532C),
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      height: 1.37,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text.rich(
-                  TextSpan(
+
+                  // Bottom: Sunny + Feels like
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextSpan(
-                        text: 'Sunny',
+                      Text(
+                        'Sunny',
                         style: GoogleFonts.nunito(
                           color: const Color(0xFF5B532C),
                           fontSize: 12,
                           fontWeight: FontWeight.w400,
                         ),
                       ),
-                      const TextSpan(text: '     '),
-                      TextSpan(
-                        text: 'Feels like 31°C',
+                      const SizedBox(height: 1), // reduced spacing
+                      Text(
+                        'Feels like 31°C',
                         style: GoogleFonts.sourceSansPro(
                           color: const Color(0xCC5B532C),
                           fontSize: 8,
@@ -326,9 +336,8 @@ class _HomeSectionState extends State<HomeSection> {
                       ),
                     ],
                   ),
-                  textAlign: TextAlign.right,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
 
@@ -337,13 +346,13 @@ class _HomeSectionState extends State<HomeSection> {
             left: 14,
             bottom: 11,
             child: SizedBox(
-              width: (width - 42) * 0.3,
+              width: (width - 42) * 0.4,
               child: Text(
                 'Sunny weather may compromise the Silkworm, Grasserie and Flacherie diseases may occur.',
                 textAlign: TextAlign.justify,
                 style: GoogleFonts.sourceSansPro(
                   color: const Color(0xFF5B532C),
-                  fontSize: 6,
+                  fontSize: 7,
                   fontWeight: FontWeight.w400,
                 ),
               ),
@@ -371,22 +380,42 @@ class _HomeSectionState extends State<HomeSection> {
   Widget _buildExploreGrid(double width) {
     final cardWidth = (width - 63) / 4;
     final exploreItems = [
-      {'icon': Icons.help_outline, 'label': 'Diseases'},
-      {'icon': Icons.warning_amber, 'label': 'Symptoms'},
-      {'icon': Icons.shield, 'label': 'Prevention'},
-      {'icon': Icons.eco, 'label': 'Rearing'},
+      {
+        'icon': 'assets/Explore/Diseases.png',
+        'label': 'Diseases',
+        'w': 20.0,
+        'h': 21.0,
+      },
+      {
+        'icon': 'assets/Explore/Symptoms.png',
+        'label': 'Symptoms',
+        'w': 23.0,
+        'h': 21.0,
+      },
+      {
+        'icon': 'assets/Explore/Prevention.png',
+        'label': 'Prevention',
+        'w': 17.0,
+        'h': 21.0,
+      },
+      {
+        'icon': 'assets/Explore/Rearing.png',
+        'label': 'Rearing',
+        'w': 21.0,
+        'h': 21.0,
+      },
     ];
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 21),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: exploreItems.map((item) {
+        children: exploreItems.map<Widget>((item) {
           return SizedBox(
             width: cardWidth,
             child: Column(
               children: [
-                // Card
+                // Card with icon and label inside
                 Container(
                   width: cardWidth,
                   height: cardWidth,
@@ -402,21 +431,35 @@ class _HomeSectionState extends State<HomeSection> {
                       ),
                     ],
                   ),
-                  child: Icon(
-                    item['icon'] as IconData,
-                    size: cardWidth * 0.3,
-                    color: const Color(0xFF5B532C),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Label
-                Text(
-                  item['label'] as String,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.sourceSansPro(
-                    color: const Color(0xFF5B532C),
-                    fontSize: 8,
-                    fontWeight: FontWeight.w600,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: item['w'] as double,
+                        height: item['h'] as double,
+                        child: Image.asset(
+                          item['icon'] as String,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Icon(
+                              Icons.image_not_supported,
+                              size: 20,
+                              color: const Color(0xFF5B532C),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        item['label'] as String,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.sourceSansPro(
+                          color: const Color(0xFF5B532C),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -468,7 +511,7 @@ class _HomeSectionState extends State<HomeSection> {
     return Container(
       width: width - 42,
       height: 163,
-      margin: EdgeInsets.symmetric(horizontal: width * 0.055),
+      margin: const EdgeInsets.symmetric(horizontal: 21),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
@@ -495,6 +538,114 @@ class _HomeSectionState extends State<HomeSection> {
     );
   }
 
+  Widget _buildAllMonthsSection(double width) {
+    final cardWidth = width - 42;
+    final months = [
+      {'name': 'November', 'healthy': 60, 'npv': 35, 'flacherie': 5},
+      {'name': 'October', 'healthy': 60, 'npv': 35, 'flacherie': 5},
+      {'name': 'September', 'healthy': 60, 'npv': 35, 'flacherie': 5},
+      {'name': 'August', 'healthy': 60, 'npv': 35, 'flacherie': 5},
+    ];
+
+    return Container(
+      width: width,
+      padding: const EdgeInsets.symmetric(horizontal: 21),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section Title
+          Text(
+            'All Months',
+            style: GoogleFonts.nunito(
+              color: const Color(0xFF5B532C),
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Legend at the top with lollipop design
+          _buildLegendRow(),
+          const SizedBox(height: 8),
+
+          // Month Cards
+          Column(
+            children: months.map<Widget>((monthData) {
+              return Column(
+                children: [
+                  _buildMonthCard(
+                    monthData['name'] as String,
+                    monthData['healthy'] as int,
+                    monthData['npv'] as int,
+                    monthData['flacherie'] as int,
+                    cardWidth,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 80),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegendRow() {
+    return SizedBox(
+      width: double.infinity,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          _buildLollipopLegendItem('Healthy', const Color(0xFF66A060)),
+          const SizedBox(width: 14),
+          _buildLollipopLegendItem('NPV', const Color(0xFFE84A4A)),
+          const SizedBox(width: 14),
+          _buildLollipopLegendItem('Flacherie', const Color(0xFFB05CC5)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLollipopLegendItem(String text, Color color) {
+    return Row(
+      children: [
+        // Lollipop visualization
+        SizedBox(
+          width: 20,
+          height: 15,
+          child: Stack(
+            children: [
+              // Horizontal line
+              Positioned(
+                left: 0,
+                top: 6, // Center vertically
+                child: Container(
+                  width: 15,
+                  height: 2,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(0.5),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 4),
+        // Text label - CHANGED font size from 8 to 14
+        Text(
+          text,
+          style: GoogleFonts.nunito(
+            color: color,
+            fontSize: 12, // CHANGED: 8 to 14
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildMonthCard(
     String month,
     int healthy,
@@ -502,11 +653,9 @@ class _HomeSectionState extends State<HomeSection> {
     int flacherie,
     double width,
   ) {
-    final cardWidth = width - 42;
     return Container(
-      width: cardWidth,
-      height: 50,
-      margin: EdgeInsets.symmetric(horizontal: width * 0.055),
+      width: width,
+      height: 70,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
@@ -519,185 +668,182 @@ class _HomeSectionState extends State<HomeSection> {
           ),
         ],
       ),
-      child: Stack(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Month Name
-          Positioned(
-            left: 12,
-            top: 10,
-            child: Text(
-              month,
-              style: GoogleFonts.nunito(
-                color: const Color(0xFF5B532C),
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-              ),
+          // Month Name - CHANGED font size from 12 to 14
+          Text(
+            month,
+            style: GoogleFonts.nunito(
+              color: const Color(0xFF5B532C),
+              fontSize: 14, // CHANGED: 12 to 14
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+
+          // Percentages Row (centered on bars)
+          // Percentages Row (centered on bars)
+          SizedBox(
+            height: 20,
+            child: Stack(
+              children: [
+                // Healthy percentage
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  child: Row(
+                    children: [
+                      // Healthy segment space
+                      Expanded(
+                        flex: healthy,
+                        child: Center(
+                          child: Text(
+                            '$healthy%',
+                            style: GoogleFonts.nunito(
+                              color: const Color(0xFF66A060),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 2),
+                      // NPV segment space
+                      Expanded(
+                        flex: npv,
+                        child: Center(
+                          child: Text(
+                            '$npv%',
+                            style: GoogleFonts.nunito(
+                              color: const Color(0xFFE84A4A),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 2),
+                      // Flacherie segment space
+                      Expanded(
+                        flex: flacherie,
+                        child: Center(
+                          child: Text(
+                            '$flacherie%',
+                            style: GoogleFonts.nunito(
+                              color: const Color(0xFFB05CC5),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
 
           // Bars
-          Positioned(
-            left: 12,
-            right: 12,
-            bottom: 10,
-            child: Row(
-              children: [
-                // Healthy Bar
-                Expanded(
-                  flex: healthy,
-                  child: Container(
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF66A060),
-                      borderRadius: BorderRadius.circular(1.5),
-                    ),
+          Row(
+            children: [
+              Expanded(
+                flex: healthy,
+                child: Container(
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF66A060),
+                    borderRadius: BorderRadius.circular(1.5),
                   ),
                 ),
-                const SizedBox(width: 2),
-                // NPV Bar
-                Expanded(
-                  flex: npv,
-                  child: Container(
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE84A4A),
-                      borderRadius: BorderRadius.circular(1.5),
-                    ),
+              ),
+              const SizedBox(width: 2),
+              Expanded(
+                flex: npv,
+                child: Container(
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE84A4A),
+                    borderRadius: BorderRadius.circular(1.5),
                   ),
                 ),
-                const SizedBox(width: 2),
-                // Flacherie Bar
-                Expanded(
-                  flex: flacherie,
-                  child: Container(
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFB05CC5),
-                      borderRadius: BorderRadius.circular(1.5),
-                    ),
+              ),
+              const SizedBox(width: 2),
+              Expanded(
+                flex: flacherie,
+                child: Container(
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFB05CC5),
+                    borderRadius: BorderRadius.circular(1.5),
                   ),
                 ),
-              ],
-            ),
-          ),
-
-          // Percentage Labels
-          Positioned(
-            left: 12,
-            bottom: 20,
-            child: _buildPercentageLabel('$healthy%', const Color(0xFF66A060)),
-          ),
-          Positioned(
-            left: 12 + (cardWidth - 24) * (healthy / 100),
-            bottom: 20,
-            child: _buildPercentageLabel('$npv%', const Color(0xFFE84A4A)),
-          ),
-          Positioned(
-            right: 12,
-            bottom: 20,
-            child: _buildPercentageLabel(
-              '$flacherie%',
-              const Color(0xFFB05CC5),
-            ),
-          ),
-
-          // Legend
-          Positioned(
-            right: 12,
-            top: 10,
-            child: Row(
-              children: [
-                _buildLegendItem('Healthy', const Color(0xFF66A060)),
-                const SizedBox(width: 8),
-                _buildLegendItem('NPV', const Color(0xFFE84A4A)),
-                const SizedBox(width: 8),
-                _buildLegendItem('Flacherie', const Color(0xFFB05CC5)),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPercentageLabel(String text, Color color) {
-    return Text(
-      text,
-      style: GoogleFonts.nunito(
-        color: color,
-        fontSize: 6,
-        fontWeight: FontWeight.w700,
-      ),
-    );
-  }
-
-  Widget _buildLegendItem(String text, Color color) {
-    return Row(
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          text,
-          style: GoogleFonts.nunito(
-            color: color,
-            fontSize: 8,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildBottomNavigation(double width) {
     final navItems = [
-      {'icon': Icons.home, 'label': 'Home'},
-      {'icon': Icons.camera_alt, 'label': 'Scan'},
-      {'icon': Icons.cloud_upload, 'label': 'Upload'},
-      {'icon': Icons.history, 'label': 'History'},
-      {'icon': Icons.menu_book, 'label': 'Manual'},
+      {'icon': Icons.home_outlined, 'label': 'Home'},
+      {'icon': Icons.camera_alt_outlined, 'label': 'Scan'},
+      {'icon': Icons.cloud_upload_outlined, 'label': 'Upload'},
+      {'icon': Icons.history_outlined, 'label': 'History'},
+      {'icon': Icons.menu_book_outlined, 'label': 'Manual'},
     ];
 
     return Container(
-      width: width * 0.67,
-      height: 34,
-      margin: EdgeInsets.symmetric(horizontal: width * 0.165),
+      width: width - 84,
+      height: 60,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment(0.50, 0.00),
           end: Alignment(0.50, 1.00),
           colors: [Color(0xFFFFC50F), Color(0xFF997609)],
         ),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+            spreadRadius: 0,
+          ),
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: navItems.asMap().entries.map((entry) {
+        children: navItems.asMap().entries.map<Widget>((entry) {
           final index = entry.key;
           final item = entry.value;
           return GestureDetector(
             onTap: () => _onItemTapped(index),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  item['icon'] as IconData,
-                  size: 18,
-                  color: const Color(0xFF504926),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  item['label'] as String,
-                  style: GoogleFonts.nunito(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    item['icon'] as IconData,
+                    size: 24,
                     color: const Color(0xFF504926),
-                    fontSize: 6,
-                    fontWeight: FontWeight.w600,
                   ),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    item['label'] as String,
+                    style: GoogleFonts.nunito(
+                      color: const Color(0xFF504926),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         }).toList(),
