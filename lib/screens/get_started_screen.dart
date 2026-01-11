@@ -9,40 +9,20 @@ class GetStartedScreen extends StatefulWidget {
 }
 
 class _GetStartedScreenState extends State<GetStartedScreen> {
-  int _currentPage = 0;
-  late PageController _pageController;
-
-  final List<OnboardingPage> _pages = [
-    OnboardingPage(
-      title: 'Welcome to SILKRETO',
-      description: 'Organize your fashion like never before',
-      image: Icons.checkroom,
-      backgroundColor: const Color(0xFF6B5B95),
-    ),
-    OnboardingPage(
-      title: 'Manage Your Style',
-      description: 'Create outfits, track trends, and express yourself',
-      image: Icons.palette,
-      backgroundColor: const Color(0xFF8B7BA8),
-    ),
-    OnboardingPage(
-      title: 'Get Started Now',
-      description: 'Begin your journey to the perfect wardrobe',
-      image: Icons.star,
-      backgroundColor: const Color(0xFF6B5B95),
-    ),
-  ];
+  double _opacity = 0.0;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
+    _startAnimation();
   }
 
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
+  void _startAnimation() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() {
+        _opacity = 1.0;
+      });
+    });
   }
 
   Future<void> _completeOnboarding() async {
@@ -59,144 +39,142 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: Center(
-        child: PageView.builder(
-          controller: _pageController,
-          onPageChanged: (index) {
-            setState(() {
-              _currentPage = index;
-            });
-          },
-          itemCount: _pages.length,
-          itemBuilder: (context, index) {
-            return _buildOnboardingPage(_pages[index]);
-          },
+        child: AnimatedOpacity(
+          opacity: _opacity,
+          duration: const Duration(milliseconds: 800),
+          curve: Curves.easeIn,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Maintain exact 380x560 ratio or scale proportionally
+              final double containerWidth = constraints.maxWidth > 380
+                  ? 380
+                  : constraints.maxWidth;
+              final double containerHeight = containerWidth * (560 / 380);
+
+              return Container(
+                width: containerWidth,
+                height: containerHeight,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: const Alignment(0.50, -0.00),
+                    end: const Alignment(0.50, 1.00),
+                    colors: const [
+                      Color(0xFF63A361), // #63A361
+                      Color(0xFF253D24), // #253D24
+                    ],
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    // Description Text
+                    Positioned(
+                      left: containerWidth * (36 / 380),
+                      top: containerHeight * (393 / 560),
+                      child: SizedBox(
+                        width: containerWidth * (307 / 380),
+                        height: containerHeight * (45 / 560),
+                        child: Text(
+                          'Lorem ipsum dolor sit amet consectetur adipiscing elit. Dolor sit amet consectetur adipiscing elit quisque faucibus.Lorem ipsum dolor sit amet consectetur adipiscing elit.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: containerWidth * (12 / 380),
+                            fontFamily: 'Source Sans Pro',
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Get Started Button Background
+                    Positioned(
+                      left: containerWidth * (30 / 380),
+                      top: containerHeight * (478 / 560),
+                      child: GestureDetector(
+                        onTap: _completeOnboarding,
+                        child: Container(
+                          width: containerWidth * (323 / 380),
+                          height: containerHeight * (40 / 560),
+                          decoration: ShapeDecoration(
+                            color: const Color(0xFFFFC50F),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                containerWidth * (10 / 380),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Get Started Button Text
+                    Positioned(
+                      left: containerWidth * (148 / 380),
+                      top: containerHeight * (487 / 560),
+                      child: GestureDetector(
+                        onTap: _completeOnboarding,
+                        child: Text(
+                          'Get Started',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: const Color(0xFF5B532C),
+                            fontSize: containerWidth * (16 / 380),
+                            fontFamily: 'Nunito',
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Title Text
+                    Positioned(
+                      left: containerWidth * (98 / 380),
+                      top: containerHeight * (349 / 560),
+                      child: SizedBox(
+                        width:
+                            containerWidth - (containerWidth * (98 / 380) * 2),
+                        child: Text(
+                          'SILKRETO',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: containerWidth * (32 / 380),
+                            fontFamily: 'Nunito',
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: containerWidth * (3.20 / 380),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Image Container
+                    Positioned(
+                      left: containerWidth * (122 / 380),
+                      top: containerHeight * (228 / 560),
+                      child: Container(
+                        width: containerWidth * (135 / 380),
+                        height: containerWidth * (135 / 380),
+                        decoration: BoxDecoration(
+                          image: DecorationImage(
+                            image: const AssetImage("assets/Silkreto-Logo.png"),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildOnboardingPage(OnboardingPage page) {
-    return Container(
-      width: 380,
-      height: 560,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: const Alignment(0.50, -0.00),
-          end: const Alignment(0.50, 1.00),
-          colors: [const Color(0xFF63A361), const Color(0xFF253D24)],
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Description Text
-          Positioned(
-            left: 36,
-            top: 393,
-            child: SizedBox(
-              width: 307,
-              height: 45,
-              child: Text(
-                page.description,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontFamily: 'Source Sans Pro',
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ),
-          ),
-          // Get Started Button Background
-          Positioned(
-            left: 30,
-            top: 478,
-            child: Container(
-              width: 323,
-              height: 40,
-              decoration: ShapeDecoration(
-                color: const Color(0xFFFFC50F),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ),
-          // Get Started Button Text
-          Positioned(
-            left: 148,
-            top: 487,
-            child: GestureDetector(
-              onTap: () {
-                if (_currentPage == _pages.length - 1) {
-                  _completeOnboarding();
-                } else {
-                  _pageController.nextPage(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                  );
-                }
-              },
-              child: const Text(
-                'Get Started',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Color(0xFF5B532C),
-                  fontSize: 16,
-                  fontFamily: 'Nunito',
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-          // Title Text
-          Positioned(
-            left: 98,
-            top: 349,
-            child: Text(
-              page.title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 32,
-                fontFamily: 'Nunito',
-                fontWeight: FontWeight.w900,
-                letterSpacing: 3.20,
-              ),
-            ),
-          ),
-          // Image Container
-          Positioned(
-            left: 122,
-            top: 228,
-            child: Container(
-              width: 135,
-              height: 135,
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image: NetworkImage("https://placehold.co/135x135"),
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  @override
+  void dispose() {
+    super.dispose();
   }
-}
-
-class OnboardingPage {
-  final String title;
-  final String description;
-  final IconData image;
-  final Color backgroundColor;
-
-  OnboardingPage({
-    required this.title,
-    required this.description,
-    required this.image,
-    required this.backgroundColor,
-  });
 }
