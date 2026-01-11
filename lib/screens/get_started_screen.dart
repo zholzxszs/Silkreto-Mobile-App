@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class GetStartedScreen extends StatefulWidget {
@@ -36,135 +37,139 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: AnimatedOpacity(
-          opacity: _opacity,
-          duration: const Duration(milliseconds: 800),
-          curve: Curves.easeIn,
+      backgroundColor: const Color(0xFF63A361),
+      body: AnimatedOpacity(
+        opacity: _opacity,
+        duration: const Duration(milliseconds: 800),
+        curve: Curves.easeIn,
+        child: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: const Alignment(0.50, -0.00),
+              end: const Alignment(0.50, 1.00),
+              colors: const [Color(0xFF63A361), Color(0xFF253D24)],
+            ),
+          ),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              // Maintain exact 380x560 ratio or scale proportionally
-              final double containerWidth = constraints.maxWidth > 380
-                  ? 380
+              final containerWidth = constraints.maxWidth > 380.0
+                  ? 380.0
                   : constraints.maxWidth;
-              final double containerHeight = containerWidth * (560 / 380);
+              final containerHeight = containerWidth * (560 / 380);
 
-              return Container(
-                width: containerWidth,
-                height: containerHeight,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: const Alignment(0.50, -0.00),
-                    end: const Alignment(0.50, 1.00),
-                    colors: const [
-                      Color(0xFF63A361), // #63A361
-                      Color(0xFF253D24), // #253D24
-                    ],
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    // Description Text
-                    Positioned(
-                      left: containerWidth * (36 / 380),
-                      top: containerHeight * (393 / 560),
-                      child: SizedBox(
-                        width: containerWidth * (307 / 380),
-                        height: containerHeight * (45 / 560),
-                        child: Text(
-                          'Lorem ipsum dolor sit amet consectetur adipiscing elit. Dolor sit amet consectetur adipiscing elit quisque faucibus.Lorem ipsum dolor sit amet consectetur adipiscing elit.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: containerWidth * (12 / 380),
-                            fontFamily: 'Source Sans Pro',
-                            fontWeight: FontWeight.w400,
+              return Stack(
+                children: [
+                  // Position at bottom
+                  Positioned(
+                    bottom: 0,
+                    left: (constraints.maxWidth - containerWidth) / 2,
+                    child: Container(
+                      width: containerWidth,
+                      height: containerHeight,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          // Logo with spacing
+                          Container(
+                            width: containerWidth * (135 / 380),
+                            height: containerWidth * (110 / 380),
+                            margin: EdgeInsets.only(
+                              bottom:
+                                  containerHeight * (5 / 560), // Added spacing
+                            ),
+                            child: Image.asset(
+                              "assets/Silkreto-Logo.png",
+                              fit: BoxFit.contain,
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
 
-                    // Get Started Button Background
-                    Positioned(
-                      left: containerWidth * (30 / 380),
-                      top: containerHeight * (478 / 560),
-                      child: GestureDetector(
-                        onTap: _completeOnboarding,
-                        child: Container(
-                          width: containerWidth * (323 / 380),
-                          height: containerHeight * (40 / 560),
-                          decoration: ShapeDecoration(
-                            color: const Color(0xFFFFC50F),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(
-                                containerWidth * (10 / 380),
+                          // Title with spacing
+                          Container(
+                            margin: EdgeInsets.only(
+                              bottom:
+                                  containerHeight * (5 / 560), // Added spacing
+                            ),
+                            child: Text(
+                              'SILKRETO',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.nunito(
+                                color: Colors.white,
+                                fontSize: containerWidth * (32 / 380),
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: containerWidth * (3.20 / 380),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                    ),
 
-                    // Get Started Button Text
-                    Positioned(
-                      left: containerWidth * (148 / 380),
-                      top: containerHeight * (487 / 560),
-                      child: GestureDetector(
-                        onTap: _completeOnboarding,
-                        child: Text(
-                          'Get Started',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: const Color(0xFF5B532C),
-                            fontSize: containerWidth * (16 / 380),
-                            fontFamily: 'Nunito',
-                            fontWeight: FontWeight.w700,
+                          // Description with better spacing
+                          Container(
+                            width: containerWidth * (350 / 380),
+                            margin: EdgeInsets.only(
+                              bottom: containerHeight * (32 / 560),
+                              left: containerWidth * (15 / 380),
+                              right: containerWidth * (15 / 380),
+                            ),
+                            child: Text(
+                              'Lorem ipsum dolor sit amet consectetur adipiscing elit. Dolor sit amet consectetur adipiscing elit quisque faucibus.Lorem ipsum dolor sit amet consectetur adipiscing elit.',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.sourceSansPro(
+                                color: Colors.white,
+                                fontSize:
+                                    containerWidth *
+                                    (13 / 380), // Slightly larger
+                                fontWeight: FontWeight.w400,
+                                height: 1.4, // Better line spacing
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
 
-                    // Title Text
-                    Positioned(
-                      left: containerWidth * (98 / 380),
-                      top: containerHeight * (349 / 560),
-                      child: SizedBox(
-                        width:
-                            containerWidth - (containerWidth * (98 / 380) * 2),
-                        child: Text(
-                          'SILKRETO',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: containerWidth * (32 / 380),
-                            fontFamily: 'Nunito',
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: containerWidth * (3.20 / 380),
+                          // Button with spacing
+                          Container(
+                            margin: EdgeInsets.only(
+                              bottom:
+                                  containerHeight *
+                                  (60 / 560), // Added bottom spacing
+                            ),
+                            child: GestureDetector(
+                              onTap: _completeOnboarding,
+                              child: Container(
+                                width: containerWidth * (323 / 380),
+                                height:
+                                    containerHeight *
+                                    (48 / 560), // Slightly taller
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFC50F),
+                                  borderRadius: BorderRadius.circular(
+                                    containerWidth *
+                                        (15 / 380), // Slightly more rounded
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    'Get Started',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.nunito(
+                                      color: const Color(0xFF5B532C),
+                                      fontSize:
+                                          containerWidth *
+                                          (17 / 380), // Slightly larger
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
-
-                    // Image Container
-                    Positioned(
-                      left: containerWidth * (122 / 380),
-                      top: containerHeight * (228 / 560),
-                      child: Container(
-                        width: containerWidth * (135 / 380),
-                        height: containerWidth * (135 / 380),
-                        decoration: BoxDecoration(
-                          image: DecorationImage(
-                            image: const AssetImage("assets/Silkreto-Logo.png"),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               );
             },
           ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -31,24 +32,13 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (!mounted) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    final hasSeenOnboarding = prefs.getBool('hasSeenOnboarding') ?? false;
-
     if (mounted) {
-      if (hasSeenOnboarding) {
-        Navigator.of(context).pushReplacementNamed('/home');
-      } else {
-        Navigator.of(context).pushReplacementNamed('/getStarted');
-      }
+      Navigator.of(context).pushReplacementNamed('/getStarted');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final containerWidth = screenSize.width > 380 ? 380.0 : screenSize.width;
-    final containerHeight = containerWidth * (560 / 380);
-
     return Scaffold(
       backgroundColor: const Color(0xFF63A361),
       body: AnimatedOpacity(
@@ -62,52 +52,52 @@ class _SplashScreenState extends State<SplashScreen> {
             gradient: LinearGradient(
               begin: const Alignment(0.50, -0.00),
               end: const Alignment(0.50, 1.00),
-              colors: const [
-                Color(0xFF63A361), // #63A361
-                Color(0xFF253D24), // #253D24
-              ],
+              colors: const [Color(0xFF63A361), Color(0xFF253D24)],
             ),
           ),
-          child: Center(
-            child: Container(
-              width: containerWidth,
-              height: containerHeight,
-              child: Stack(
-                children: [
-                  // Logo Image
-                  Positioned(
-                    left: containerWidth * (122 / 380),
-                    top: containerHeight * (230 / 560),
-                    child: Container(
-                      width: containerWidth * (135 / 380),
-                      height: containerWidth * (135 / 380),
-                      child: Image.asset(
-                        'assets/Silkreto-Logo.png',
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final containerWidth = constraints.maxWidth > 380.0
+                  ? 380.0
+                  : constraints.maxWidth;
+              final containerHeight = containerWidth * (560 / 380);
 
-                  // SILKRETO Text
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: containerHeight * (380 / 560),
-                    child: Text(
-                      'SILKRETO',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: containerWidth * (32 / 380),
-                        fontFamily: 'Nunito',
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: containerWidth * (3.20 / 380),
+              return Center(
+                child: Container(
+                  width: containerWidth,
+                  height: containerHeight,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Logo centered
+                      Container(
+                        width: containerWidth * (135 / 380),
+                        height: containerWidth * (110 / 380),
+                        margin: EdgeInsets.only(
+                          bottom: containerHeight * (15 / 560),
+                        ),
+                        child: Image.asset(
+                          'assets/Silkreto-Logo.png',
+                          fit: BoxFit.contain,
+                        ),
                       ),
-                    ),
+
+                      // Title centered
+                      Text(
+                        'SILKRETO',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.nunito(
+                          color: Colors.white,
+                          fontSize: containerWidth * (32 / 380),
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: containerWidth * (3.20 / 380),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ),
       ),
