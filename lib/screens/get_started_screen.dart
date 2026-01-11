@@ -37,8 +37,6 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-
     return Scaffold(
       backgroundColor: const Color(0xFF63A361),
       body: AnimatedOpacity(
@@ -68,7 +66,7 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
                   Positioned(
                     bottom: 0,
                     left: (constraints.maxWidth - containerWidth) / 2,
-                    child: Container(
+                    child: SizedBox(
                       width: containerWidth,
                       height: containerHeight,
                       child: Column(
