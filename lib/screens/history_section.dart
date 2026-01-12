@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import '../models/scan_result_model.dart';
 
@@ -13,9 +15,17 @@ class HistorySection extends StatefulWidget {
 class _HistorySectionState extends State<HistorySection> {
   final ScrollController _scrollController = ScrollController();
   bool _navVisible = true;
-  int _selectedIndex = 3;
   double _previousOffset = 0.0;
-  late Future<List<ScanResult>> _scanResults;
+  List<ScanResult> _allScanResults = [];
+  List<ScanResult> _filteredScanResults = [];
+  List<int> _availableYears = [];
+  int? _selectedYear;
+  String? _selectedMonth;
+
+  final List<String> _months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
 
   @override
   void initState() {
@@ -24,8 +34,79 @@ class _HistorySectionState extends State<HistorySection> {
     _loadScanResults();
   }
 
-  void _loadScanResults() {
-    _scanResults = DatabaseHelper().getAllScanResults();
+  void _loadScanResults() async {
+    final results = await DatabaseHelper().getAllScanResults();
+    final dateFormat = DateFormat('MMM dd, yyyy');
+    final years = results.map((r) {
+      try {
+        return dateFormat.parse(r.scanDate).year;
+      } catch (e) {
+        return null;
+      }
+    }).where((y) => y != null).cast<int>().toSet().toList();
+
+    years.sort((a, b) => b.compareTo(a)); // Sort descending
+
+    final now = DateTime.now();
+
+    setState(() {
+      _allScanResults = results;
+      _availableYears = years;
+      
+      // Set initial selected year to current year if available, otherwise latest
+      if (years.contains(now.year)) {
+        _selectedYear = now.year;
+      } else if (years.isNotEmpty) {
+        _selectedYear = years.first;
+      }
+
+      // Set initial selected month to current month
+      _selectedMonth = _months[now.month - 1];
+
+      _filterResults();
+    });
+  }
+
+  void _filterResults() {
+    final dateFormat = DateFormat('MMM dd, yyyy');
+    if (_selectedYear == null) {
+      _filteredScanResults = _allScanResults;
+    } else {
+      _filteredScanResults = _allScanResults.where((r) {
+        try {
+          final date = dateFormat.parse(r.scanDate);
+          final yearMatches = date.year == _selectedYear;
+          final monthMatches = _selectedMonth == null || (date.month) == (_months.indexOf(_selectedMonth!) + 1);
+          return yearMatches && monthMatches;
+        } catch (e) {
+          return false;
+        }
+      }).toList();
+    }
+    setState(() {});
+  }
+
+  void _deleteScanResult(int id) async {
+    await DatabaseHelper().deleteScanResult(id);
+    _loadScanResults();
+  }
+
+  void _showImagePreview(BuildContext context, String imagePath) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.file(File(imagePath)),
+            TextButton(
+              child: const Text('Close'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _onScroll() {
@@ -47,114 +128,79 @@ class _HistorySectionState extends State<HistorySection> {
     super.dispose();
   }
 
-  void _onItemTapped(int index) {
-    setState(() => _selectedIndex = index);
-    if (index == 0) {
-      Navigator.of(context).pushReplacementNamed('/home');
-    } else if (index == 1) {
-      Navigator.of(context).pushNamed('/scan');
-    } else if (index == 2) {
-      Navigator.of(context).pushNamed('/upload');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
+    final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF5F5F5),
       body: Stack(
         children: [
-          CustomScrollView(
+          ListView(
             controller: _scrollController,
-            slivers: [
-              SliverAppBar(
-                pinned: true,
-                backgroundColor: const Color(0xFF6B5B95),
-                expandedHeight: size.height * 0.12,
-                flexibleSpace: FlexibleSpaceBar(
-                  title: const Text('History'),
-                  centerTitle: true,
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 16,
-                  horizontal: 16,
-                ),
-                sliver: FutureBuilder<List<ScanResult>>(
-                  future: _scanResults,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return SliverToBoxAdapter(
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    if (snapshot.hasError) {
-                      return SliverToBoxAdapter(
-                        child: Center(child: Text('Error: ${snapshot.error}')),
-                      );
-                    }
-                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return SliverToBoxAdapter(
-                        child: Center(child: Text('No scans yet')),
-                      );
-                    }
-                    final results = snapshot.data!;
-                    return SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) =>
-                            _buildHistoryCard(context, results[index]),
-                        childCount: results.length,
-                      ),
-                    );
-                  },
-                ),
-              ),
+            padding: EdgeInsets.zero,
+            children: [
+              _buildHeader(screenWidth),
+              _buildFilters(),
+              _buildHistoryList(),
+              SizedBox(height: MediaQuery.of(context).padding.bottom + 35 + 60),
             ],
           ),
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            bottom: _navVisible
+                ? MediaQuery.of(context).padding.bottom + 35
+                : -100,
+            left: 42,
+            right: 42,
+            child: _buildBottomNavigation(screenWidth),
+          ),
+        ],
+      ),
+    );
+  }
 
-          // Floating bottom navigation rectangle
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 16,
-            child: AnimatedSlide(
-              duration: const Duration(milliseconds: 300),
-              offset: _navVisible ? Offset.zero : const Offset(0, 1.2),
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 250),
-                opacity: _navVisible ? 1 : 0,
-                child: Center(
-                  child: Container(
-                    width: size.width * (size.width > 600 ? 0.6 : 0.95),
-                    height: 72,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.12),
-                          blurRadius: 18,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _navItem(Icons.home_outlined, 'Home', 0),
-                        _navItem(Icons.qr_code_scanner, 'Scan', 1),
-                        _navItem(Icons.cloud_upload_outlined, 'Upload', 2),
-                        _navItem(Icons.history, 'History', 3),
-                        _navItem(Icons.menu_book, 'Manual', 4),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+  Widget _buildHeader(double width) {
+    return Container(
+      width: width,
+      height: 60,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment(0.50, 0.00),
+          end: Alignment(0.50, 1.00),
+          colors: [Color(0xFF63A361), Color(0xFF253D24)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0x3F000000),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 16),
+          Text(
+            'SILKRETO',
+            style: GoogleFonts.nunito(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.90,
+            ),
+          ),
+          const Spacer(),
+          Container(
+            width: 26,
+            height: 26,
+            margin: const EdgeInsets.only(right: 16),
+            child: const Icon(
+              Icons.notifications_none,
+              color: Colors.white,
+              size: 26,
             ),
           ),
         ],
@@ -162,382 +208,280 @@ class _HistorySectionState extends State<HistorySection> {
     );
   }
 
-  Widget _navItem(IconData icon, String label, int index) {
-    final selected = _selectedIndex == index;
-    final color = selected ? const Color(0xFF6B5B95) : Colors.grey[600];
-    return Expanded(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _onItemTapped(index),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
+  Widget _buildFilters() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 20, right: 20, left: 20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          _buildMonthDropdown(),
+          const SizedBox(width: 8),
+          _buildYearDropdown(),
+        ],
       ),
+    );
+  }
+
+  Widget _buildMonthDropdown() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: DropdownButton<String>(
+        value: _selectedMonth,
+        hint: Text('Month', style: GoogleFonts.nunito(fontSize: 12)),
+        underline: const SizedBox(),
+        isDense: true,
+        items: _months.map((String month) {
+          return DropdownMenuItem<String>(
+            value: month,
+            child: Text(month, style: GoogleFonts.nunito(fontSize: 12)),
+          );
+        }).toList(),
+        onChanged: (newValue) {
+          setState(() {
+            _selectedMonth = newValue;
+            _filterResults();
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildYearDropdown() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: DropdownButton<int>(
+        value: _selectedYear,
+        hint: Text('Year', style: GoogleFonts.nunito(fontSize: 12)),
+        underline: const SizedBox(),
+        isDense: true,
+        items: _availableYears.map((int year) {
+          return DropdownMenuItem<int>(
+            value: year,
+            child: Text(year.toString(), style: GoogleFonts.nunito(fontSize: 12)),
+          );
+        }).toList(),
+        onChanged: (newValue) {
+          setState(() {
+            _selectedYear = newValue;
+            _filterResults();
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildHistoryList() {
+    if (_filteredScanResults.isEmpty) {
+      return const Center(child: Padding(
+        padding: EdgeInsets.all(32.0),
+        child: Text('No scans found for the selected period.'),
+      ));
+    }
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(20),
+      itemCount: _filteredScanResults.length,
+      itemBuilder: (context, index) =>
+          _buildHistoryCard(context, _filteredScanResults[index]),
     );
   }
 
   Widget _buildHistoryCard(BuildContext context, ScanResult scanResult) {
-    final size = MediaQuery.of(context).size;
-    final status = scanResult.status;
-    final statusColor = _getStatusColor(status);
-    final statusBg = _getStatusBgColor(status);
-
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      elevation: 2,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            // Image thumbnail - tappable to show preview
-            GestureDetector(
-              onTap: () => _showImagePreview(context, scanResult),
-              child: Container(
-                width: size.width * 0.22,
-                height: size.width * 0.22,
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.grey[300]!),
-                ),
-                child: Stack(
+    return Container(
+      height: 80,
+      margin: const EdgeInsets.only(bottom: 15),
+      decoration: ShapeDecoration(
+        gradient: LinearGradient(
+          begin: Alignment(0.50, 1.00),
+          end: Alignment(0.50, -0.00),
+          colors: [const Color(0xFF253D24), const Color(0xFF63A361)],
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        shadows: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 15),
+          GestureDetector(
+            onTap: () => _showImagePreview(context, scanResult.rawImagePath),
+            child: Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: const Color(0xFFD9D9D9),
+                image: File(scanResult.rawImagePath).existsSync()
+                    ? DecorationImage(
+                        image: FileImage(File(scanResult.rawImagePath)),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
+              ),
+              child: !File(scanResult.rawImagePath).existsSync()
+                  ? const Icon(Icons.image_not_supported, color: Colors.grey)
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    File(scanResult.rawImagePath).existsSync()
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(9),
-                            child: Image.file(
-                              File(scanResult.rawImagePath),
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        : Center(
-                            child: Icon(
-                              Icons.image,
-                              size: 40,
-                              color: Colors.grey,
-                            ),
-                          ),
-                    Positioned(
-                      right: 4,
-                      bottom: 4,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF6B5B95),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        padding: const EdgeInsets.all(4),
-                        child: const Icon(
-                          Icons.zoom_in,
-                          size: 14,
-                          color: Colors.white,
-                        ),
+                    Text(
+                      '${scanResult.scanDate} at ${scanResult.scanTime}',
+                      style: GoogleFonts.nunito(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(
+                      height: 24, // Constrain height
+                      width: 24, // Constrain width
+                      child: IconButton(
+                        padding: EdgeInsets.zero, // Remove default padding
+                        iconSize: 20, // Adjust icon size
+                        icon: const Icon(Icons.delete, color: Colors.redAccent),
+                        onPressed: () => _deleteScanResult(scanResult.id!),
                       ),
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _buildCountChip('Healthy: ${scanResult.healthyCount}', const Color(0xFF4CAF50), Colors.white),
+                    const SizedBox(width: 8),
+                    _buildCountChip('Grasserie: ${scanResult.grasserieCount}', const Color(0xFFF44336), Colors.white),
+                    const SizedBox(width: 8),
+                    _buildCountChip('Flacherie: ${scanResult.flacherieCount}', const Color(0xFF9C27B0), Colors.white),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            // Content
-            Expanded(
+          ),
+          const SizedBox(width: 15),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCountChip(String label, Color bgColor, Color textColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.nunito(
+          color: textColor,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildBottomNavigation(double width) {
+    final navItems = [
+      {'icon': Icons.home_outlined, 'label': 'Home', 'route': '/home'},
+      {'icon': Icons.camera_alt_outlined, 'label': 'Scan', 'route': '/scan'},
+      {
+        'icon': Icons.cloud_upload_outlined,
+        'label': 'Upload',
+        'route': '/upload',
+      },
+      {'icon': Icons.history_outlined, 'label': 'History', 'route': '/history'},
+      {'icon': Icons.menu_book_outlined, 'label': 'Manual', 'route': '/manual'},
+    ];
+
+    return Container(
+      width: width - 84,
+      height: 60,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment(0.50, 0.00),
+          end: Alignment(0.50, 1.00),
+          colors: [Color(0xFFFFC50F), Color(0xFF997609)],
+        ),
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: navItems.asMap().entries.map<Widget>((entry) {
+          final item = entry.value;
+          final isActive = item['label'] == 'History';
+          return GestureDetector(
+            onTap: () {
+              final route = item['route'] as String?;
+              if (route == null || route == '/history') return;
+
+              // Basic navigation
+              Navigator.pushNamed(context, route);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Status badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusBg,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      status,
-                      style: TextStyle(
-                        color: statusColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Date
-                  Text(
-                    scanResult.scanDate,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey[800],
-                    ),
+                  Icon(
+                    item['icon'] as IconData,
+                    size: 24,
+                    color: isActive
+                        ? const Color(0xFF2F2F2F)
+                        : const Color(0xFF504926),
                   ),
                   const SizedBox(height: 4),
-                  // Time
                   Text(
-                    scanResult.scanTime,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.grey[600],
-                      letterSpacing: 0.2,
+                    item['label'] as String,
+                    style: GoogleFonts.nunito(
+                      color: isActive
+                          ? const Color(0xFF2F2F2F)
+                          : const Color(0xFF504926),
+                      fontSize: 10,
+                      fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
                     ),
                   ),
                 ],
               ),
             ),
-            // Arrow icon
-            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
-          ],
-        ),
+          );
+        }).toList(),
       ),
     );
-  }
-
-  void _showImagePreview(BuildContext context, ScanResult scanResult) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: Stack(
-          children: [
-            // Full-screen preview
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 16,
-                    ),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF6B5B95),
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(16),
-                        topRight: Radius.circular(16),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Annotated Image - ${scanResult.status}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: const Icon(
-                            Icons.close,
-                            color: Colors.white,
-                            size: 22,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Image preview
-                  Container(
-                    color: Colors.grey[900],
-                    padding: const EdgeInsets.all(12),
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[800],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey[700]!),
-                        ),
-                        child: Stack(
-                          children: [
-                            File(scanResult.rawImagePath).existsSync()
-                                ? ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Image.file(
-                                      File(scanResult.rawImagePath),
-                                      fit: BoxFit.cover,
-                                    ),
-                                  )
-                                : Center(
-                                    child: Icon(
-                                      Icons.image,
-                                      size: 80,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Footer with info
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[850],
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(16),
-                        bottomRight: Radius.circular(16),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Status: ${scanResult.status}',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Date: ${scanResult.scanDate} • ${scanResult.scanTime}',
-                              style: const TextStyle(
-                                color: Colors.white54,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.check, size: 16),
-                          label: const Text(
-                            'Got it',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF6B5B95),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Grasserie':
-        return const Color(0xFF2E7D32); // Modern deep green
-      case 'Flacherie':
-        return const Color(0xFFE65100); // Modern deep orange
-      case 'Healthy':
-        return const Color(0xFF1565C0); // Modern deep blue
-      default:
-        return Colors.grey;
-    }
-  }
-
-  Color _getStatusBgColor(String status) {
-    switch (status) {
-      case 'Grasserie':
-        return const Color(0xFF2E7D32).withOpacity(0.12); // Light green bg
-      case 'Flacherie':
-        return const Color(0xFFE65100).withOpacity(0.12); // Light orange bg
-      case 'Healthy':
-        return const Color(0xFF1565C0).withOpacity(0.12); // Light blue bg
-      default:
-        return Colors.grey.withOpacity(0.12);
-    }
   }
 }
 
-// Custom painter for annotation visualization
-class AnnotationPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.cyan.withOpacity(0.6)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    // Draw some example annotation boxes to simulate annotated image
-    canvas.drawRect(
-      Rect.fromLTWH(
-        size.width * 0.15,
-        size.height * 0.2,
-        size.width * 0.3,
-        size.height * 0.25,
-      ),
-      paint,
-    );
-
-    canvas.drawCircle(
-      Offset(size.width * 0.7, size.height * 0.4),
-      size.width * 0.12,
-      paint,
-    );
-
-    canvas.drawRect(
-      Rect.fromLTWH(
-        size.width * 0.5,
-        size.height * 0.6,
-        size.width * 0.35,
-        size.height * 0.3,
-      ),
-      paint,
-    );
-
-    // Draw center crosshair
-    final crossPaint = Paint()
-      ..color = Colors.amber.withOpacity(0.7)
-      ..strokeWidth = 1;
-    canvas.drawLine(
-      Offset(size.width / 2 - 15, size.height / 2),
-      Offset(size.width / 2 + 15, size.height / 2),
-      crossPaint,
-    );
-    canvas.drawLine(
-      Offset(size.width / 2, size.height / 2 - 15),
-      Offset(size.width / 2, size.height / 2 + 15),
-      crossPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
