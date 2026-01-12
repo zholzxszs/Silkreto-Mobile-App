@@ -570,34 +570,7 @@ class _ScanSectionState extends State<ScanSection> {
               final route = item['route'] as String?;
               if (route == null || route == '/scan') return;
 
-              // Workaround for route error - use direct MaterialPageRoute or pushReplacement
-              // Adjust with your actual screen widgets
-              Widget? targetScreen;
-              switch (route) {
-                case '/home':
-                  targetScreen =
-                      const HomeSection(); // Import HomeSection if needed
-                  break;
-                case '/upload':
-                  targetScreen = const UploadSection();
-                  break;
-                case '/history':
-                  targetScreen = const PlaceholderScreen(title: 'History');
-                  break;
-                case '/manual':
-                  targetScreen = const PlaceholderScreen(title: 'Manual');
-                  break;
-                default:
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Unknown route: $route')),
-                  );
-                  return;
-              }
-
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => targetScreen!),
-              );
+              Navigator.pushNamed(context, route);
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
