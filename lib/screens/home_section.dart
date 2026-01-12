@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import '../database/database_helper.dart';
+import '../models/scan_result_model.dart';
 
 class HomeSection extends StatefulWidget {
   const HomeSection({super.key});
@@ -14,11 +17,81 @@ class _HomeSectionState extends State<HomeSection> {
   bool _navVisible = true;
   double _previousOffset = 0.0;
 
+  List<int> _availableYears = [];
+  int? _selectedYear;
+  Map<String, Map<String, int>> _monthlyAnalytics = {};
+
+  final List<String> _months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
   @override
   void initState() {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _scrollController.addListener(_onScroll);
+    _loadAnalyticsData();
+  }
+
+  Future<void> _loadAnalyticsData() async {
+    final results = await DatabaseHelper().getAllScanResults();
+    final dateFormat = DateFormat('MMM dd, yyyy');
+    final years = results.map((r) {
+      try {
+        return dateFormat.parse(r.scanDate).year;
+      } catch (e) {
+        return null;
+      }
+    }).where((y) => y != null).cast<int>().toSet().toList();
+
+    years.sort((a, b) => b.compareTo(a));
+
+    final now = DateTime.now();
+    setState(() {
+      _availableYears = years;
+      if (years.contains(now.year)) {
+        _selectedYear = now.year;
+      } else if (years.isNotEmpty) {
+        _selectedYear = years.first;
+      }
+      _processDataForYear(_selectedYear, results);
+    });
+  }
+
+  void _processDataForYear(int? year, List<ScanResult> allResults) {
+    if (year == null) return;
+
+    final dateFormat = DateFormat('MMM dd, yyyy');
+    final yearlyResults = allResults.where((r) {
+      try {
+        return dateFormat.parse(r.scanDate).year == year;
+      } catch (e) {
+        return false;
+      }
+    }).toList();
+
+    final analytics = <String, Map<String, int>>{};
+    for (var result in yearlyResults) {
+      try {
+        final date = dateFormat.parse(result.scanDate);
+        final monthName = _months[date.month - 1];
+
+        if (!analytics.containsKey(monthName)) {
+          analytics[monthName] = {'healthy': 0, 'grasserie': 0, 'flacherie': 0};
+        }
+
+        analytics[monthName]!['healthy'] = (analytics[monthName]!['healthy'] ?? 0) + result.healthyCount;
+        analytics[monthName]!['grasserie'] = (analytics[monthName]!['grasserie'] ?? 0) + result.grasserieCount;
+        analytics[monthName]!['flacherie'] = (analytics[monthName]!['flacherie'] ?? 0) + result.flacherieCount;
+      } catch (e) {
+        // Ignore records with parsing errors
+      }
+    }
+    
+    setState(() {
+      _monthlyAnalytics = analytics;
+    });
   }
 
   void _onScroll() {
@@ -33,19 +106,6 @@ class _HomeSectionState extends State<HomeSection> {
     _previousOffset = offset;
   }
 
-  void _onItemTapped(int index) {
-    if (index == 1) {
-      Navigator.of(context).pushNamed('/scan');
-    } else if (index == 2) {
-      Navigator.of(context).pushNamed('/upload');
-    } else if (index == 3) {
-      Navigator.of(context).pushNamed('/history');
-    } else if (index == 4) {
-      Navigator.of(context).pushNamed('/manual');
-    } else if (index == 0) {
-      Navigator.of(context).pushReplacementNamed('/home');
-    }
-  }
 
   @override
   void dispose() {
@@ -476,31 +536,30 @@ class _HomeSectionState extends State<HomeSection> {
       child: Align(
         alignment: Alignment.centerRight,
         child: Container(
-          width: 60,
-          height: 18,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Row(
-            children: [
-              const SizedBox(width: 8),
-              Text(
-                '2025',
-                style: GoogleFonts.nunito(
-                  color: const Color(0xFF5B532C),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-              const Spacer(),
-              const Icon(
-                Icons.arrow_drop_down,
-                size: 16,
-                color: Color(0xFF5B532C),
-              ),
-              const SizedBox(width: 4),
-            ],
+          child: DropdownButton<int>(
+            value: _selectedYear,
+            hint: Text('Year', style: GoogleFonts.nunito(fontSize: 12)),
+            underline: const SizedBox(),
+            isDense: true,
+            items: _availableYears.map((int year) {
+              return DropdownMenuItem<int>(
+                value: year,
+                child: Text(year.toString(), style: GoogleFonts.nunito(fontSize: 12)),
+              );
+            }).toList(),
+            onChanged: (newValue) {
+              if (newValue != null) {
+                setState(() {
+                  _selectedYear = newValue;
+                  _loadAnalyticsData(); // Reload and re-process data for the new year
+                });
+              }
+            },
           ),
         ),
       ),
@@ -540,12 +599,7 @@ class _HomeSectionState extends State<HomeSection> {
 
   Widget _buildAllMonthsSection(double width) {
     final cardWidth = width - 42;
-    final months = [
-      {'name': 'November', 'healthy': 60, 'npv': 35, 'flacherie': 5},
-      {'name': 'October', 'healthy': 60, 'npv': 35, 'flacherie': 5},
-      {'name': 'September', 'healthy': 60, 'npv': 35, 'flacherie': 5},
-      {'name': 'August', 'healthy': 60, 'npv': 35, 'flacherie': 5},
-    ];
+    final sortedMonths = _monthlyAnalytics.keys.toList()..sort((a, b) => _months.indexOf(b).compareTo(_months.indexOf(a)));
 
     return Container(
       width: width,
@@ -553,7 +607,6 @@ class _HomeSectionState extends State<HomeSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section Title
           Text(
             'All Months',
             style: GoogleFonts.nunito(
@@ -563,28 +616,36 @@ class _HomeSectionState extends State<HomeSection> {
             ),
           ),
           const SizedBox(height: 16),
-
-          // Legend at the top with lollipop design
           _buildLegendRow(),
           const SizedBox(height: 8),
+          if (sortedMonths.isEmpty)
+            const Center(child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 32.0),
+              child: Text('No scan data for the selected year.'),
+            ))
+          else
+            Column(
+              children: sortedMonths.map<Widget>((monthName) {
+                final data = _monthlyAnalytics[monthName]!;
+                final total = data['healthy']! + data['grasserie']! + data['flacherie']!;
+                final healthyPercent = total > 0 ? (data['healthy']! * 100 / total).round() : 0;
+                final grasseriePercent = total > 0 ? (data['grasserie']! * 100 / total).round() : 0;
+                final flacheriePercent = total > 0 ? (data['flacherie']! * 100 / total).round() : 0;
 
-          // Month Cards
-          Column(
-            children: months.map<Widget>((monthData) {
-              return Column(
-                children: [
-                  _buildMonthCard(
-                    monthData['name'] as String,
-                    monthData['healthy'] as int,
-                    monthData['npv'] as int,
-                    monthData['flacherie'] as int,
-                    cardWidth,
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              );
-            }).toList(),
-          ),
+                return Column(
+                  children: [
+                    _buildMonthCard(
+                      monthName,
+                      healthyPercent,
+                      grasseriePercent,
+                      flacheriePercent,
+                      cardWidth,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                );
+              }).toList(),
+            ),
           const SizedBox(height: 80),
         ],
       ),
@@ -599,7 +660,7 @@ class _HomeSectionState extends State<HomeSection> {
         children: [
           _buildLollipopLegendItem('Healthy', const Color(0xFF66A060)),
           const SizedBox(width: 14),
-          _buildLollipopLegendItem('NPV', const Color(0xFFE84A4A)),
+          _buildLollipopLegendItem('Grasserie', const Color(0xFFE84A4A)),
           const SizedBox(width: 14),
           _buildLollipopLegendItem('Flacherie', const Color(0xFFB05CC5)),
         ],
@@ -790,12 +851,16 @@ class _HomeSectionState extends State<HomeSection> {
 
   Widget _buildBottomNavigation(double width) {
     final navItems = [
-      {'icon': Icons.home_outlined, 'label': 'Home'},
-      {'icon': Icons.camera_alt_outlined, 'label': 'Scan'},
-      {'icon': Icons.cloud_upload_outlined, 'label': 'Upload'},
-      {'icon': Icons.history_outlined, 'label': 'History'},
-      {'icon': Icons.menu_book_outlined, 'label': 'Manual'},
+      {'icon': Icons.home_outlined, 'label': 'Home', 'route': '/home'},
+      {'icon': Icons.camera_alt_outlined, 'label': 'Scan', 'route': '/scan'},
+      {'icon': Icons.cloud_upload_outlined, 'label': 'Upload', 'route': '/upload'},
+      {'icon': Icons.history_outlined, 'label': 'History', 'route': '/history'},
+      {'icon': Icons.menu_book_outlined, 'label': 'Manual', 'route': '/manual'},
     ];
+
+    void _handleNavigation(String route) {
+      Navigator.pushNamed(context, route);
+    }
 
     return Container(
       width: width - 84,
@@ -819,10 +884,12 @@ class _HomeSectionState extends State<HomeSection> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: navItems.asMap().entries.map<Widget>((entry) {
-          final index = entry.key;
           final item = entry.value;
+          final isActive = item['label'] == 'Home';
           return GestureDetector(
-            onTap: () => _onItemTapped(index),
+            onTap: () {
+              _handleNavigation(item['route'] as String);
+            },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Column(
@@ -831,15 +898,19 @@ class _HomeSectionState extends State<HomeSection> {
                   Icon(
                     item['icon'] as IconData,
                     size: 24,
-                    color: const Color(0xFF504926),
+                    color: isActive
+                        ? const Color(0xFF2F2F2F)
+                        : const Color(0xFF504926),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     item['label'] as String,
                     style: GoogleFonts.nunito(
-                      color: const Color(0xFF504926),
+                      color: isActive
+                          ? const Color(0xFF2F2F2F)
+                          : const Color(0xFF504926),
                       fontSize: 10,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
                     ),
                   ),
                 ],
