@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class GetStartedScreen extends StatefulWidget {
   const GetStartedScreen({super.key});
@@ -24,6 +25,25 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
         _opacity = 1.0;
       });
     });
+  }
+
+  Future<void> _requestPermissions() async {
+    var cameraStatus = await Permission.camera.status;
+    if (!cameraStatus.isGranted) {
+      await Permission.camera.request();
+    }
+
+    var storageStatus = await Permission.storage.status;
+    if (!storageStatus.isGranted) {
+      await Permission.storage.request();
+    }
+
+    if (await Permission.camera.isGranted && await Permission.storage.isGranted) {
+      _completeOnboarding();
+    } else {
+      // Handle the case where the user denies the permissions
+      // You can show a dialog explaining why the permissions are needed
+    }
   }
 
   Future<void> _completeOnboarding() async {
@@ -134,7 +154,7 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
                                   (60 / 560), // Added bottom spacing
                             ),
                             child: GestureDetector(
-                              onTap: _completeOnboarding,
+                              onTap: _requestPermissions,
                               child: Container(
                                 width: containerWidth * (323 / 380),
                                 height:
