@@ -7,8 +7,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 // ignore: depend_on_referenced_packages
 import 'package:path_provider/path_provider.dart';
-import 'package:silkreto/screens/home_section.dart';
-import 'package:silkreto/screens/scan_section.dart';
 
 import '../database/database_helper.dart';
 import '../models/scan_result_model.dart';
@@ -531,17 +529,6 @@ class _UploadSectionState extends State<UploadSection> {
             ),
           ),
           const Spacer(),
-          // Notification Icon
-          Container(
-            width: 26,
-            height: 26,
-            margin: const EdgeInsets.only(right: 16),
-            child: const Icon(
-              Icons.notifications_none,
-              color: Colors.white,
-              size: 26,
-            ),
-          ),
         ],
       ),
     );
@@ -651,4 +638,3 @@ class _UploadSectionState extends State<UploadSection> {
     );
   }
 }
-

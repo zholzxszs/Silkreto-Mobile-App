@@ -22,8 +22,18 @@ class _HomeSectionState extends State<HomeSection> {
   Map<String, Map<String, int>> _monthlyAnalytics = {};
 
   final List<String> _months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   @override
@@ -37,13 +47,18 @@ class _HomeSectionState extends State<HomeSection> {
   Future<void> _loadAnalyticsData() async {
     final results = await DatabaseHelper().getAllScanResults();
     final dateFormat = DateFormat('MMM dd, yyyy');
-    final years = results.map((r) {
-      try {
-        return dateFormat.parse(r.scanDate).year;
-      } catch (e) {
-        return null;
-      }
-    }).where((y) => y != null).cast<int>().toSet().toList();
+    final years = results
+        .map((r) {
+          try {
+            return dateFormat.parse(r.scanDate).year;
+          } catch (e) {
+            return null;
+          }
+        })
+        .where((y) => y != null)
+        .cast<int>()
+        .toSet()
+        .toList();
 
     years.sort((a, b) => b.compareTo(a));
 
@@ -81,14 +96,17 @@ class _HomeSectionState extends State<HomeSection> {
           analytics[monthName] = {'healthy': 0, 'grasserie': 0, 'flacherie': 0};
         }
 
-        analytics[monthName]!['healthy'] = (analytics[monthName]!['healthy'] ?? 0) + result.healthyCount;
-        analytics[monthName]!['grasserie'] = (analytics[monthName]!['grasserie'] ?? 0) + result.grasserieCount;
-        analytics[monthName]!['flacherie'] = (analytics[monthName]!['flacherie'] ?? 0) + result.flacherieCount;
+        analytics[monthName]!['healthy'] =
+            (analytics[monthName]!['healthy'] ?? 0) + result.healthyCount;
+        analytics[monthName]!['grasserie'] =
+            (analytics[monthName]!['grasserie'] ?? 0) + result.grasserieCount;
+        analytics[monthName]!['flacherie'] =
+            (analytics[monthName]!['flacherie'] ?? 0) + result.flacherieCount;
       } catch (e) {
         // Ignore records with parsing errors
       }
     }
-    
+
     setState(() {
       _monthlyAnalytics = analytics;
     });
@@ -105,7 +123,6 @@ class _HomeSectionState extends State<HomeSection> {
     }
     _previousOffset = offset;
   }
-
 
   @override
   void dispose() {
@@ -221,17 +238,6 @@ class _HomeSectionState extends State<HomeSection> {
             ),
           ),
           const Spacer(),
-          // Notification Icon
-          Container(
-            width: 26,
-            height: 26,
-            margin: const EdgeInsets.only(right: 16),
-            child: const Icon(
-              Icons.notifications_none,
-              color: Colors.white,
-              size: 26,
-            ),
-          ),
         ],
       ),
     );
@@ -549,7 +555,10 @@ class _HomeSectionState extends State<HomeSection> {
             items: _availableYears.map((int year) {
               return DropdownMenuItem<int>(
                 value: year,
-                child: Text(year.toString(), style: GoogleFonts.nunito(fontSize: 12)),
+                child: Text(
+                  year.toString(),
+                  style: GoogleFonts.nunito(fontSize: 12),
+                ),
               );
             }).toList(),
             onChanged: (newValue) {
@@ -599,7 +608,8 @@ class _HomeSectionState extends State<HomeSection> {
 
   Widget _buildAllMonthsSection(double width) {
     final cardWidth = width - 42;
-    final sortedMonths = _monthlyAnalytics.keys.toList()..sort((a, b) => _months.indexOf(b).compareTo(_months.indexOf(a)));
+    final sortedMonths = _monthlyAnalytics.keys.toList()
+      ..sort((a, b) => _months.indexOf(b).compareTo(_months.indexOf(a)));
 
     return Container(
       width: width,
@@ -619,18 +629,27 @@ class _HomeSectionState extends State<HomeSection> {
           _buildLegendRow(),
           const SizedBox(height: 8),
           if (sortedMonths.isEmpty)
-            const Center(child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 32.0),
-              child: Text('No scan data for the selected year.'),
-            ))
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 32.0),
+                child: Text('No scan data for the selected year.'),
+              ),
+            )
           else
             Column(
               children: sortedMonths.map<Widget>((monthName) {
                 final data = _monthlyAnalytics[monthName]!;
-                final total = data['healthy']! + data['grasserie']! + data['flacherie']!;
-                final healthyPercent = total > 0 ? (data['healthy']! * 100 / total).round() : 0;
-                final grasseriePercent = total > 0 ? (data['grasserie']! * 100 / total).round() : 0;
-                final flacheriePercent = total > 0 ? (data['flacherie']! * 100 / total).round() : 0;
+                final total =
+                    data['healthy']! + data['grasserie']! + data['flacherie']!;
+                final healthyPercent = total > 0
+                    ? (data['healthy']! * 100 / total).round()
+                    : 0;
+                final grasseriePercent = total > 0
+                    ? (data['grasserie']! * 100 / total).round()
+                    : 0;
+                final flacheriePercent = total > 0
+                    ? (data['flacherie']! * 100 / total).round()
+                    : 0;
 
                 return Column(
                   children: [
@@ -853,7 +872,11 @@ class _HomeSectionState extends State<HomeSection> {
     final navItems = [
       {'icon': Icons.home_outlined, 'label': 'Home', 'route': '/home'},
       {'icon': Icons.camera_alt_outlined, 'label': 'Scan', 'route': '/scan'},
-      {'icon': Icons.cloud_upload_outlined, 'label': 'Upload', 'route': '/upload'},
+      {
+        'icon': Icons.cloud_upload_outlined,
+        'label': 'Upload',
+        'route': '/upload',
+      },
       {'icon': Icons.history_outlined, 'label': 'History', 'route': '/history'},
       {'icon': Icons.menu_book_outlined, 'label': 'Manual', 'route': '/manual'},
     ];
