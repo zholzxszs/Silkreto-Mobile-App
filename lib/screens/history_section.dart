@@ -23,8 +23,18 @@ class _HistorySectionState extends State<HistorySection> {
   String? _selectedMonth;
 
   final List<String> _months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   @override
@@ -37,13 +47,18 @@ class _HistorySectionState extends State<HistorySection> {
   void _loadScanResults() async {
     final results = await DatabaseHelper().getAllScanResults();
     final dateFormat = DateFormat('MMM dd, yyyy');
-    final years = results.map((r) {
-      try {
-        return dateFormat.parse(r.scanDate).year;
-      } catch (e) {
-        return null;
-      }
-    }).where((y) => y != null).cast<int>().toSet().toList();
+    final years = results
+        .map((r) {
+          try {
+            return dateFormat.parse(r.scanDate).year;
+          } catch (e) {
+            return null;
+          }
+        })
+        .where((y) => y != null)
+        .cast<int>()
+        .toSet()
+        .toList();
 
     years.sort((a, b) => b.compareTo(a)); // Sort descending
 
@@ -52,7 +67,7 @@ class _HistorySectionState extends State<HistorySection> {
     setState(() {
       _allScanResults = results;
       _availableYears = years;
-      
+
       // Set initial selected year to current year if available, otherwise latest
       if (years.contains(now.year)) {
         _selectedYear = now.year;
@@ -76,7 +91,9 @@ class _HistorySectionState extends State<HistorySection> {
         try {
           final date = dateFormat.parse(r.scanDate);
           final yearMatches = date.year == _selectedYear;
-          final monthMatches = _selectedMonth == null || (date.month) == (_months.indexOf(_selectedMonth!) + 1);
+          final monthMatches =
+              _selectedMonth == null ||
+              (date.month) == (_months.indexOf(_selectedMonth!) + 1);
           return yearMatches && monthMatches;
         } catch (e) {
           return false;
@@ -86,9 +103,40 @@ class _HistorySectionState extends State<HistorySection> {
     setState(() {});
   }
 
-  void _deleteScanResult(int id) async {
-    await DatabaseHelper().deleteScanResult(id);
-    _loadScanResults();
+  // ────────────────────────────────────────────────
+  //  Modified: Added confirmation dialog before delete
+  // ────────────────────────────────────────────────
+  Future<void> _deleteScanResult(int id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Record'),
+        content: const Text(
+          'Are you sure you want to delete this record?\n'
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await DatabaseHelper().deleteScanResult(id);
+      _loadScanResults(); // Refresh the list
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Scan record deleted')));
+      }
+    }
   }
 
   void _showImagePreview(BuildContext context, String imagePath) {
@@ -127,7 +175,6 @@ class _HistorySectionState extends State<HistorySection> {
     _scrollController.dispose();
     super.dispose();
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -193,16 +240,6 @@ class _HistorySectionState extends State<HistorySection> {
             ),
           ),
           const Spacer(),
-          Container(
-            width: 26,
-            height: 26,
-            margin: const EdgeInsets.only(right: 16),
-            child: const Icon(
-              Icons.notifications_none,
-              color: Colors.white,
-              size: 26,
-            ),
-          ),
         ],
       ),
     );
@@ -265,7 +302,10 @@ class _HistorySectionState extends State<HistorySection> {
         items: _availableYears.map((int year) {
           return DropdownMenuItem<int>(
             value: year,
-            child: Text(year.toString(), style: GoogleFonts.nunito(fontSize: 12)),
+            child: Text(
+              year.toString(),
+              style: GoogleFonts.nunito(fontSize: 12),
+            ),
           );
         }).toList(),
         onChanged: (newValue) {
@@ -280,10 +320,12 @@ class _HistorySectionState extends State<HistorySection> {
 
   Widget _buildHistoryList() {
     if (_filteredScanResults.isEmpty) {
-      return const Center(child: Padding(
-        padding: EdgeInsets.all(32.0),
-        child: Text('No scans found for the selected period.'),
-      ));
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Text('No scans found for the selected period.'),
+        ),
+      );
     }
 
     return ListView.builder(
@@ -306,9 +348,7 @@ class _HistorySectionState extends State<HistorySection> {
           end: Alignment(0.50, -0.00),
           colors: [const Color(0xFF253D24), const Color(0xFF63A361)],
         ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         shadows: [
           BoxShadow(
             color: Colors.black.withOpacity(0.2),
@@ -372,11 +412,23 @@ class _HistorySectionState extends State<HistorySection> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    _buildCountChip('Healthy: ${scanResult.healthyCount}', const Color(0xFF4CAF50), Colors.white),
+                    _buildCountChip(
+                      'Healthy: ${scanResult.healthyCount}',
+                      const Color(0xFF4CAF50),
+                      Colors.white,
+                    ),
                     const SizedBox(width: 8),
-                    _buildCountChip('Grasserie: ${scanResult.grasserieCount}', const Color(0xFFF44336), Colors.white),
+                    _buildCountChip(
+                      'Grasserie: ${scanResult.grasserieCount}',
+                      const Color(0xFFF44336),
+                      Colors.white,
+                    ),
                     const SizedBox(width: 8),
-                    _buildCountChip('Flacherie: ${scanResult.flacherieCount}', const Color(0xFF9C27B0), Colors.white),
+                    _buildCountChip(
+                      'Flacherie: ${scanResult.flacherieCount}',
+                      const Color(0xFF9C27B0),
+                      Colors.white,
+                    ),
                   ],
                 ),
               ],
@@ -405,7 +457,6 @@ class _HistorySectionState extends State<HistorySection> {
       ),
     );
   }
-
 
   Widget _buildBottomNavigation(double width) {
     final navItems = [
@@ -484,4 +535,3 @@ class _HistorySectionState extends State<HistorySection> {
     );
   }
 }
-
