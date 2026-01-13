@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:silkreto/screens/get_started_screen.dart';
+import 'package:silkreto/screens/home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -15,7 +18,7 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     _startAnimation();
-    _navigateToNextScreen();
+    _checkOnboardingAndNavigate();
   }
 
   void _startAnimation() {
@@ -26,14 +29,47 @@ class _SplashScreenState extends State<SplashScreen> {
     });
   }
 
-  Future<void> _navigateToNextScreen() async {
-    await Future.delayed(const Duration(seconds: 2));
+  Future<void> _checkOnboardingAndNavigate() async {
+    // Give time for logo fade-in + pleasant short wait
+    await Future.delayed(const Duration(seconds: 3));
 
     if (!mounted) return;
 
-    if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/getStarted');
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenOnboarding = prefs.getBool('hasSeenOnboarding') ?? false;
+
+    Widget nextScreen;
+    if (hasSeenOnboarding) {
+      nextScreen = const HomeScreen();
+    } else {
+      nextScreen = const GetStartedScreen();
     }
+
+    if (!mounted) return;
+
+    // Smooth fade + slight scale transition
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = 0.92;
+          const end = 1.0;
+          const curve = Curves.easeOutCubic;
+
+          var tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
+          var scaleAnimation = animation.drive(tween);
+
+          return FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(scale: scaleAnimation, child: child),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 700),
+      ),
+    );
   }
 
   @override
@@ -47,11 +83,11 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Container(
           width: double.infinity,
           height: double.infinity,
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             gradient: LinearGradient(
-              begin: const Alignment(0.50, -0.00),
-              end: const Alignment(0.50, 1.00),
-              colors: const [Color(0xFF63A361), Color(0xFF253D24)],
+              begin: Alignment(0.50, -0.00),
+              end: Alignment(0.50, 1.00),
+              colors: [Color(0xFF63A361), Color(0xFF253D24)],
             ),
           ),
           child: LayoutBuilder(
@@ -68,7 +104,6 @@ class _SplashScreenState extends State<SplashScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Logo centered
                       Container(
                         width: containerWidth * (135 / 380),
                         height: containerWidth * (110 / 380),
@@ -80,8 +115,6 @@ class _SplashScreenState extends State<SplashScreen> {
                           fit: BoxFit.contain,
                         ),
                       ),
-
-                      // Title centered
                       Text(
                         'SILKRETO',
                         textAlign: TextAlign.center,
@@ -101,10 +134,5 @@ class _SplashScreenState extends State<SplashScreen> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 }

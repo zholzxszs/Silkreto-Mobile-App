@@ -12,6 +12,7 @@ class GetStartedScreen extends StatefulWidget {
 
 class _GetStartedScreenState extends State<GetStartedScreen> {
   double _opacity = 0.0;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -21,32 +22,54 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
 
   void _startAnimation() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      setState(() {
-        _opacity = 1.0;
-      });
+      setState(() => _opacity = 1.0);
     });
   }
 
-  Future<void> _requestPermissions() async {
-    var cameraStatus = await Permission.camera.status;
-    if (!cameraStatus.isGranted) {
-      await Permission.camera.request();
+  Future<void> _handleGetStarted() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
+    // Friendly explanation dialog before asking for permissions
+    final shouldProceed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Permissions Needed'),
+        content: const Text(
+          'Silkreto needs access to:\n\n'
+          '• Camera — to scan silkworm images\n'
+          '• Photos & Storage — to upload and save images\n\n'
+          'You can change these permissions later in your device settings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldProceed != true) {
+      setState(() => _isLoading = false);
+      return;
     }
 
-    var storageStatus = await Permission.storage.status;
-    if (!storageStatus.isGranted) {
-      await Permission.storage.request();
-    }
+    // Request permissions
+    final statuses = await [
+      Permission.camera,
+      Permission.photos,
+      Permission.storage,
+    ].request();
 
-    if (await Permission.camera.isGranted && await Permission.storage.isGranted) {
-      _completeOnboarding();
-    } else {
-      // Handle the case where the user denies the permissions
-      // You can show a dialog explaining why the permissions are needed
-    }
-  }
+    // Optional: you can check if all are granted and show message if not
+    statuses.values.every((status) => status.isGranted);
 
-  Future<void> _completeOnboarding() async {
+    // Save onboarding flag (even if permissions denied — user can grant later)
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('hasSeenOnboarding', true);
 
@@ -66,23 +89,22 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
         child: Container(
           width: double.infinity,
           height: double.infinity,
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             gradient: LinearGradient(
-              begin: const Alignment(0.50, -0.00),
-              end: const Alignment(0.50, 1.00),
-              colors: const [Color(0xFF63A361), Color(0xFF253D24)],
+              begin: Alignment(0.50, -0.00),
+              end: Alignment(0.50, 1.00),
+              colors: [Color(0xFF63A361), Color(0xFF253D24)],
             ),
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final containerWidth = constraints.maxWidth > 380.0
+              final containerWidth = constraints.maxWidth > 380
                   ? 380.0
                   : constraints.maxWidth;
               final containerHeight = containerWidth * (560 / 380);
 
               return Stack(
                 children: [
-                  // Position at bottom
                   Positioned(
                     bottom: 0,
                     left: (constraints.maxWidth - containerWidth) / 2,
@@ -92,25 +114,20 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          // Logo with spacing
                           Container(
                             width: containerWidth * (135 / 380),
                             height: containerWidth * (110 / 380),
                             margin: EdgeInsets.only(
-                              bottom:
-                                  containerHeight * (5 / 560), // Added spacing
+                              bottom: containerHeight * (5 / 560),
                             ),
                             child: Image.asset(
                               "assets/Silkreto-Logo.png",
                               fit: BoxFit.contain,
                             ),
                           ),
-
-                          // Title with spacing
                           Container(
                             margin: EdgeInsets.only(
-                              bottom:
-                                  containerHeight * (5 / 560), // Added spacing
+                              bottom: containerHeight * (5 / 560),
                             ),
                             child: Text(
                               'SILKRETO',
@@ -123,8 +140,6 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
                               ),
                             ),
                           ),
-
-                          // Description with better spacing
                           Container(
                             width: containerWidth * (350 / 380),
                             margin: EdgeInsets.only(
@@ -133,52 +148,51 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
                               right: containerWidth * (15 / 380),
                             ),
                             child: Text(
-                              'Lorem ipsum dolor sit amet consectetur adipiscing elit. Dolor sit amet consectetur adipiscing elit quisque faucibus.Lorem ipsum dolor sit amet consectetur adipiscing elit.',
+                              'Monitor silkworm health, detect diseases early, '
+                              'and improve your sericulture with AI-powered scanning.',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.sourceSansPro(
                                 color: Colors.white,
-                                fontSize:
-                                    containerWidth *
-                                    (13 / 380), // Slightly larger
+                                fontSize: containerWidth * (13 / 380),
                                 fontWeight: FontWeight.w400,
-                                height: 1.4, // Better line spacing
+                                height: 1.4,
                               ),
                             ),
                           ),
-
-                          // Button with spacing
                           Container(
                             margin: EdgeInsets.only(
-                              bottom:
-                                  containerHeight *
-                                  (60 / 560), // Added bottom spacing
+                              bottom: containerHeight * (60 / 560),
                             ),
                             child: GestureDetector(
-                              onTap: _requestPermissions,
+                              onTap: _isLoading ? null : _handleGetStarted,
                               child: Container(
                                 width: containerWidth * (323 / 380),
-                                height:
-                                    containerHeight *
-                                    (48 / 560), // Slightly taller
+                                height: containerHeight * (48 / 560),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFFFC50F),
                                   borderRadius: BorderRadius.circular(
-                                    containerWidth *
-                                        (15 / 380), // Slightly more rounded
+                                    containerWidth * (15 / 380),
                                   ),
                                 ),
                                 child: Center(
-                                  child: Text(
-                                    'Get Started',
-                                    textAlign: TextAlign.center,
-                                    style: GoogleFonts.nunito(
-                                      color: const Color(0xFF5B532C),
-                                      fontSize:
-                                          containerWidth *
-                                          (17 / 380), // Slightly larger
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            color: Color(0xFF5B532C),
+                                            strokeWidth: 3,
+                                          ),
+                                        )
+                                      : Text(
+                                          'Get Started',
+                                          style: GoogleFonts.nunito(
+                                            color: const Color(0xFF5B532C),
+                                            fontSize:
+                                                containerWidth * (17 / 380),
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
                                 ),
                               ),
                             ),
@@ -194,10 +208,5 @@ class _GetStartedScreenState extends State<GetStartedScreen> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 }
