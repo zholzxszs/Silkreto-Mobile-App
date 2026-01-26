@@ -23,7 +23,12 @@ class DatabaseHelper {
     final databasesPath = await getDatabasesPath();
     final path = join(databasesPath, 'silkreto.db');
 
-    return openDatabase(path, version: 1, onCreate: _createDatabase);
+    return openDatabase(
+      path,
+      version: 2,
+      onCreate: _createDatabase,
+      onUpgrade: _onUpgrade,
+    );
   }
 
   Future<void> _createDatabase(Database db, int version) async {
@@ -36,11 +41,28 @@ class DatabaseHelper {
         scan_date TEXT NOT NULL,
         scan_time TEXT NOT NULL,
         healthy_count INTEGER DEFAULT 0,
-        grasserie_count INTEGER DEFAULT 0,
-        flacherie_count INTEGER DEFAULT 0,
+        diseased_count INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Add diseased_count column
+      await db.execute(
+        'ALTER TABLE scan_history ADD COLUMN diseased_count INTEGER DEFAULT 0',
+      );
+
+      // Update diseased_count with sum of grasserie and flacherie
+      await db.execute('''
+        UPDATE scan_history
+        SET diseased_count = COALESCE(grasserie_count, 0) + COALESCE(flacherie_count, 0)
+      ''');
+
+      // Note: SQLite doesn't support DROP COLUMN easily, so we leave the old columns
+      // They can be ignored by the app
+    }
   }
 
   // Insert scan result

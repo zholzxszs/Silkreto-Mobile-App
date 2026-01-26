@@ -42,6 +42,9 @@ dependencies:
   google_fonts: ^5.0.0
   fl_chart: ^1.1.1
   permission_handler: ^11.3.1
+  tflite_flutter: ^0.12.1
+  image: ^4.1.3
+  path_provider: ^2.1.3
 
 dev_dependencies:
   flutter_test:
@@ -77,6 +80,8 @@ flutter:
     - assets/Explore/Prevention.png
     - assets/Explore/Rearing.png
     - assets/Explore/Symptoms.png
+    - assets/model/best_float32.tflite
+
 
   # To add assets to your application, add an assets section, like this:
   # assets:
