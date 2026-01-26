@@ -1,11 +1,13 @@
 import 'dart:io';
+import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
-// ignore: depend_on_referenced_packages
 import 'package:path_provider/path_provider.dart';
 
 import '../database/database_helper.dart';
@@ -21,12 +23,18 @@ class UploadSection extends StatefulWidget {
 
 class _UploadSectionState extends State<UploadSection> {
   final ImagePicker _picker = ImagePicker();
+
   XFile? _image;
-  bool _isProcessing = false;
+
+  bool _isProcessing = false; // analyzing
+  bool _isSaving = false;
 
   int? healthyCount;
-  int? grasserieCount;
-  int? flacherieCount;
+  int? diseasedCount;
+
+  // YOLO detections for bounding boxes
+  List<Detection> _detections = const [];
+  ModelPrediction? _lastPrediction;
 
   // Floating nav behavior
   final ScrollController _scrollController = ScrollController();
@@ -38,15 +46,13 @@ class _UploadSectionState extends State<UploadSection> {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _scrollController.addListener(_onScroll);
-    _selectFile();
-  }
 
-  Future<void> _selectFile() async {
-    // Ensure the widget is built before showing the picker
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _pickFromGallery();
-      }
+    // Auto open gallery when screen loads (init model first to reduce delay)
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await TFLiteModelService().ensureInitialized();
+      } catch (_) {}
+      await _pickFromGallery();
     });
   }
 
@@ -66,27 +72,143 @@ class _UploadSectionState extends State<UploadSection> {
   Future<void> _pickFromGallery() async {
     try {
       final picked = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: ImageSource.gallery, // ✅ gallery
+        maxWidth: 640,
+        maxHeight: 640,
         imageQuality: 85,
       );
+
       if (picked != null && mounted) {
         setState(() {
+          _isProcessing = true;
           _image = picked;
           healthyCount = null;
-          grasserieCount = null;
-          flacherieCount = null;
+          diseasedCount = null;
+          _detections = const [];
+          _lastPrediction = null;
         });
+
+        // ✅ let UI paint overlay first
+        await Future.delayed(const Duration(milliseconds: 16));
+
+        await _analyzeCurrentImage();
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Gallery error: $e')));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gallery error: $e')));
     }
   }
 
-  Future<void> _retake() async {
+  /// ✅ This is the key fix: show "Analyzing..." FIRST, then yield 1 frame.
+  Future<void> _analyzeCurrentImage() async {
+    if (_image == null) return;
+
+    setState(() {
+      _isProcessing = true;
+      healthyCount = null;
+      diseasedCount = null;
+      _detections = const [];
+      _lastPrediction = null;
+    });
+
+    // ✅ allow Flutter to render overlay before heavy decode/inference
+    await Future.delayed(const Duration(milliseconds: 16));
+
+    try {
+      final modelService = TFLiteModelService();
+      await modelService.ensureInitialized();
+
+      final prediction = await modelService.predictFromImage(_image!.path);
+
+      if (!mounted) return;
+      setState(() {
+        healthyCount = prediction.healthyCount;
+        diseasedCount = prediction.diseasedCount;
+        _detections = prediction.detections;
+        _lastPrediction = prediction;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Analyze error: $e')));
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Widget _buildPreviewWithBoxes() {
+    if (_image == null) return const SizedBox.shrink();
+
+    // Draw on fixed 640x640 then scale/crop together with the image
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: FittedBox(
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+            child: SizedBox(
+              width: 640,
+              height: 640,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Image.file(File(_image!.path), fit: BoxFit.fill),
+                  ),
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: YoloBoxPainter(
+                          detections: _detections,
+                          labels: const ['Healthy', 'Diseased'],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        // ✅ Overlay badge
+        if (_isProcessing || _isSaving)
+          Positioned(
+            left: 12,
+            top: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.55),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _isProcessing ? 'Analyzing...' : 'Saving...',
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _reupload() async {
     setState(() => _image = null);
     await _pickFromGallery();
   }
@@ -94,10 +216,9 @@ class _UploadSectionState extends State<UploadSection> {
   Future<void> _confirmAndSave() async {
     if (_image == null) return;
 
-    setState(() => _isProcessing = true);
+    setState(() => _isSaving = true);
 
     try {
-      // Get proper app documents directory (works on Android + iOS)
       final appDir = await getApplicationDocumentsDirectory();
       final fileName = 'upload_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final newImage = File('${appDir.path}/$fileName');
@@ -107,58 +228,115 @@ class _UploadSectionState extends State<UploadSection> {
       final dateFormat = DateFormat('MMM dd, yyyy');
       final timeFormat = DateFormat('h:mm a');
 
-      // Run inference
-      final modelService = TFLiteModelService();
-      final prediction = await modelService.predictFromImage(newImage.path);
+      // Use last prediction (avoid re-inference)
+      ModelPrediction prediction = _lastPrediction ?? ModelPrediction.empty();
+      if (prediction.status == 'Unknown') {
+        final modelService = TFLiteModelService();
+        await modelService.ensureInitialized();
+        prediction = await modelService.predictFromImage(newImage.path);
+      }
 
-      // Update UI with real values
       if (mounted) {
         setState(() {
           healthyCount = prediction.healthyCount;
-          grasserieCount = prediction.grasserieCount;
-          flacherieCount = prediction.flacherieCount;
+          diseasedCount = prediction.diseasedCount;
+          _detections = prediction.detections;
+          _lastPrediction = prediction;
         });
+      }
+
+      // Create annotated image with boxes
+      String? annotatedImagePath;
+      if (prediction.detections.isNotEmpty) {
+        final bytes = File(newImage.path).readAsBytesSync();
+        final image = img.decodeImage(bytes);
+        if (image != null) {
+          final canvas = img.Image.from(image);
+
+          for (final d in prediction.detections) {
+            final color = d.classId == 0
+                ? img.ColorRgb8(102, 166, 96)
+                : img.ColorRgb8(228, 74, 74);
+
+            // auto detect normalized coords
+            final isNorm =
+                d.x1.abs() <= 1.5 &&
+                d.y1.abs() <= 1.5 &&
+                d.x2.abs() <= 1.5 &&
+                d.y2.abs() <= 1.5;
+
+            final x1 =
+                (isNorm ? d.x1 * image.width : d.x1 / 640.0 * image.width)
+                    .toInt()
+                    .clamp(0, image.width - 1);
+            final y1 =
+                (isNorm ? d.y1 * image.height : d.y1 / 640.0 * image.height)
+                    .toInt()
+                    .clamp(0, image.height - 1);
+            final x2 =
+                (isNorm ? d.x2 * image.width : d.x2 / 640.0 * image.width)
+                    .toInt()
+                    .clamp(0, image.width - 1);
+            final y2 =
+                (isNorm ? d.y2 * image.height : d.y2 / 640.0 * image.height)
+                    .toInt()
+                    .clamp(0, image.height - 1);
+
+            img.drawRect(
+              canvas,
+              x1: x1,
+              y1: y1,
+              x2: x2,
+              y2: y2,
+              color: color,
+              thickness: 3,
+            );
+          }
+
+          final annotatedFileName =
+              'annotated_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final annotatedPath = '${appDir.path}/$annotatedFileName';
+          File(annotatedPath).writeAsBytesSync(img.encodeJpg(canvas));
+          annotatedImagePath = annotatedPath;
+        }
       }
 
       final scanResult = ScanResult(
         rawImagePath: newImage.path,
-        annotatedImagePath: null,
+        annotatedImagePath: annotatedImagePath,
         status: prediction.status,
         scanDate: dateFormat.format(now),
         scanTime: timeFormat.format(now),
         healthyCount: prediction.healthyCount,
-        grasserieCount: prediction.grasserieCount,
-        flacherieCount: prediction.flacherieCount,
+        diseasedCount: prediction.diseasedCount,
       );
 
       await DatabaseHelper().insertScanResult(scanResult);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Scan result saved successfully!')),
+          const SnackBar(content: Text('Upload saved successfully')),
         );
-        _resetState();
+      }
+
+      // Reset
+      if (mounted) {
+        setState(() {
+          _image = null;
+          healthyCount = null;
+          diseasedCount = null;
+          _detections = const [];
+          _lastPrediction = null;
+        });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error saving upload: $e')));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
-      if (mounted) {
-        setState(() => _isProcessing = false);
-      }
+      if (mounted) setState(() => _isSaving = false);
     }
-  }
-
-  void _resetState() {
-    setState(() {
-      _image = null;
-      healthyCount = null;
-      grasserieCount = null;
-      flacherieCount = null;
-    });
   }
 
   @override
@@ -185,92 +363,79 @@ class _UploadSectionState extends State<UploadSection> {
             padding: EdgeInsets.zero,
             children: [
               _buildHeader(screenWidth),
-              // Image at the top
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  width: double.infinity,
-                  constraints: const BoxConstraints(
-                    minHeight: 280,
-                    maxHeight: 280,
-                  ),
-                  height: 280,
-                  margin: const EdgeInsets.only(top: 40),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD9D9D9),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: _image == null
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.cloud_upload_outlined,
-                                size: 60,
-                                color: Colors.grey[400],
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No image selected',
-                                style: GoogleFonts.nunito(
-                                  color: Colors.grey[600],
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              ElevatedButton.icon(
-                                onPressed: _pickFromGallery,
-                                icon: const Icon(Icons.photo_library),
-                                label: const Text('Choose from Gallery'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF63A361),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : Image.file(
-                          File(_image!.path),
-                          width: double.infinity,
-                          height: 280,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(
-                            Icons.broken_image,
-                            size: 60,
-                            color: Colors.grey,
-                          ),
-                        ),
-                ),
-              ),
+              const SizedBox(height: 40),
 
-              // Counts and Buttons section - below image, larger
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   children: [
+                    Container(
+                      width: double.infinity,
+                      constraints: const BoxConstraints(
+                        minHeight: 280,
+                        maxHeight: 280,
+                      ),
+                      height: 280,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE0E0E0),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _image == null
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.cloud_upload_outlined,
+                                    size: 60,
+                                    color: Colors.grey[400],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No image selected',
+                                    style: GoogleFonts.nunito(
+                                      color: Colors.grey[600],
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  ElevatedButton(
+                                    onPressed: _pickFromGallery,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF63A361),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(30),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 32,
+                                        vertical: 12,
+                                      ),
+                                    ),
+                                    child: const Text('Select Image'),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : _buildPreviewWithBoxes(),
+                    ),
+
                     const SizedBox(height: 24),
-                    // Status counts - larger
+
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         Text(
                           'Healthy: ${healthyCount ?? 0}',
-                          textAlign: TextAlign.center,
                           style: GoogleFonts.nunito(
                             color: const Color(0xFF66A060),
                             fontSize: 16,
@@ -278,76 +443,50 @@ class _UploadSectionState extends State<UploadSection> {
                           ),
                         ),
                         Text(
-                          'Grasserie: ${grasserieCount ?? 0}',
-                          textAlign: TextAlign.center,
+                          'Diseased: ${diseasedCount ?? 0}',
                           style: GoogleFonts.nunito(
                             color: const Color(0xFFE84A4A),
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        Text(
-                          'Flacherie: ${flacherieCount ?? 0}',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.nunito(
-                            color: const Color(0xFFB05CC5),
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
                       ],
                     ),
-                    // Show processing message if analyzing
-                    if (_image != null && _isProcessing && healthyCount == null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          'Analyzing image...',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.nunito(
-                            color: Colors.grey,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
+
                     const SizedBox(height: 20),
-                    // Action buttons - larger
+
                     if (_image != null)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Retake button
                           GestureDetector(
-                            onTap: _isProcessing ? null : _retake,
+                            onTap: _isProcessing ? null : _reupload,
                             child: Container(
                               width: 130,
                               height: 44,
                               decoration: ShapeDecoration(
-                                gradient: LinearGradient(
+                                gradient: const LinearGradient(
                                   begin: Alignment(0.50, 0.00),
                                   end: Alignment(0.50, 1.00),
                                   colors: [
-                                    const Color(0xFFE84A4A),
-                                    const Color(0xFF822929),
+                                    Color(0xFFE84A4A),
+                                    Color(0xFF822929),
                                   ],
                                 ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                shadows: [
+                                shadows: const [
                                   BoxShadow(
                                     color: Color(0x3F000000),
                                     blurRadius: 10,
                                     offset: Offset(4, 4),
-                                    spreadRadius: 0,
                                   ),
                                 ],
                               ),
                               child: Center(
                                 child: Text(
-                                  'Choose Again',
-                                  textAlign: TextAlign.center,
+                                  'Reupload',
                                   style: GoogleFonts.nunito(
                                     color: Colors.white,
                                     fontSize: 15,
@@ -358,35 +497,33 @@ class _UploadSectionState extends State<UploadSection> {
                             ),
                           ),
                           const SizedBox(width: 20),
-                          // Save button
                           GestureDetector(
-                            onTap: _isProcessing ? null : _confirmAndSave,
+                            onTap: _isSaving ? null : _confirmAndSave,
                             child: Container(
                               width: 130,
                               height: 44,
                               decoration: ShapeDecoration(
-                                gradient: LinearGradient(
+                                gradient: const LinearGradient(
                                   begin: Alignment(0.50, 1.00),
                                   end: Alignment(0.50, 0.00),
                                   colors: [
-                                    const Color(0xFF253D24),
-                                    const Color(0xFF488646),
+                                    Color(0xFF253D24),
+                                    Color(0xFF488646),
                                   ],
                                 ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                shadows: [
+                                shadows: const [
                                   BoxShadow(
                                     color: Color(0x3F000000),
                                     blurRadius: 10,
                                     offset: Offset(4, 4),
-                                    spreadRadius: 0,
                                   ),
                                 ],
                               ),
                               child: Center(
-                                child: _isProcessing
+                                child: _isSaving
                                     ? const SizedBox(
                                         width: 24,
                                         height: 24,
@@ -397,7 +534,6 @@ class _UploadSectionState extends State<UploadSection> {
                                       )
                                     : Text(
                                         'Save',
-                                        textAlign: TextAlign.center,
                                         style: GoogleFonts.nunito(
                                           color: Colors.white,
                                           fontSize: 15,
@@ -409,79 +545,14 @@ class _UploadSectionState extends State<UploadSection> {
                           ),
                         ],
                       ),
+
+                    const SizedBox(height: 160),
                   ],
                 ),
               ),
-
-              // Tips and Recommendations section - at the bottom with better design
-              if (_image != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 20, bottom: 20),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                          spreadRadius: 0,
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFC50F).withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.lightbulb_outline,
-                                color: Color(0xFFFFC50F),
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'Tips and Recommendations',
-                              style: GoogleFonts.nunito(
-                                color: Colors.black,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        _buildTipItem(
-                          'Maintain proper ventilation and avoid overcrowding',
-                        ),
-                        const SizedBox(height: 10),
-                        _buildTipItem(
-                          'Monitor temperature and humidity closely during sunny days',
-                        ),
-                        const SizedBox(height: 10),
-                        _buildTipItem(
-                          'Inspect larvae regularly for early signs of disease',
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-              SizedBox(height: MediaQuery.of(context).padding.bottom + 35 + 60),
             ],
           ),
 
-          // Floating bottom navigation bar
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
             bottom: _navVisible
@@ -500,25 +571,23 @@ class _UploadSectionState extends State<UploadSection> {
     return Container(
       width: width,
       height: 60,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
           begin: Alignment(0.50, 0.00),
           end: Alignment(0.50, 1.00),
           colors: [Color(0xFF63A361), Color(0xFF253D24)],
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0x3F000000),
+            color: Color(0x3F000000),
             blurRadius: 10,
-            offset: const Offset(0, 4),
-            spreadRadius: 0,
+            offset: Offset(0, 4),
           ),
         ],
       ),
       child: Row(
         children: [
           const SizedBox(width: 16),
-          // SILKRETO Title
           Text(
             'SILKRETO',
             style: GoogleFonts.nunito(
@@ -529,36 +598,16 @@ class _UploadSectionState extends State<UploadSection> {
             ),
           ),
           const Spacer(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTipItem(String text) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          margin: const EdgeInsets.only(top: 6, right: 12),
-          width: 6,
-          height: 6,
-          decoration: const BoxDecoration(
-            color: Color(0xFF66A060),
-            shape: BoxShape.circle,
-          ),
-        ),
-        Expanded(
-          child: Text(
-            text,
-            style: GoogleFonts.nunito(
-              color: Colors.black87,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              height: 1.5,
+          const Padding(
+            padding: EdgeInsets.only(right: 16),
+            child: Icon(
+              Icons.notifications_none,
+              color: Colors.white,
+              size: 26,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -590,20 +639,17 @@ class _UploadSectionState extends State<UploadSection> {
             color: Colors.black.withOpacity(0.3),
             blurRadius: 15,
             offset: const Offset(0, 5),
-            spreadRadius: 0,
           ),
         ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: navItems.asMap().entries.map<Widget>((entry) {
-          final item = entry.value;
+        children: navItems.map((item) {
           final isActive = item['label'] == 'Upload';
           return GestureDetector(
             onTap: () {
               final route = item['route'] as String?;
               if (route == null || route == '/upload') return;
-
               Navigator.pushNamed(context, route);
             },
             child: Container(
@@ -636,5 +682,88 @@ class _UploadSectionState extends State<UploadSection> {
         }).toList(),
       ),
     );
+  }
+}
+
+class YoloBoxPainter extends CustomPainter {
+  final List<Detection> detections;
+  final List<String> labels;
+
+  YoloBoxPainter({required this.detections, required this.labels});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (detections.isEmpty) return;
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+
+    final textPainter = TextPainter(textDirection: ui.TextDirection.ltr);
+
+    // auto-detect normalized boxes (0..1) vs pixel boxes (0..640)
+    final bool isNormalized = detections.every(
+      (d) =>
+          d.x1.abs() <= 1.5 &&
+          d.y1.abs() <= 1.5 &&
+          d.x2.abs() <= 1.5 &&
+          d.y2.abs() <= 1.5,
+    );
+
+    for (final d in detections) {
+      paint.color = (d.classId == 0)
+          ? const Color(0xFF66A060)
+          : const Color(0xFFE84A4A);
+
+      double x1 = d.x1, y1 = d.y1, x2 = d.x2, y2 = d.y2;
+
+      if (isNormalized) {
+        x1 *= size.width;
+        x2 *= size.width;
+        y1 *= size.height;
+        y2 *= size.height;
+      } else {
+        x1 = x1 / 640.0 * size.width;
+        x2 = x2 / 640.0 * size.width;
+        y1 = y1 / 640.0 * size.height;
+        y2 = y2 / 640.0 * size.height;
+      }
+
+      final rect = Rect.fromLTRB(
+        x1.clamp(0.0, size.width),
+        y1.clamp(0.0, size.height),
+        x2.clamp(0.0, size.width),
+        y2.clamp(0.0, size.height),
+      );
+
+      canvas.drawRect(rect, paint);
+
+      final label = (d.classId >= 0 && d.classId < labels.length)
+          ? labels[d.classId]
+          : 'Class ${d.classId}';
+      final text = '$label ${(d.score * 100).toStringAsFixed(1)}%';
+
+      textPainter.text = TextSpan(
+        text: text,
+        style: TextStyle(
+          color: paint.color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          backgroundColor: const Color(0xAAFFFFFF),
+        ),
+      );
+      textPainter.layout();
+
+      final textOffset = Offset(
+        rect.left,
+        max(0, rect.top - textPainter.height),
+      );
+      textPainter.paint(canvas, textOffset);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant YoloBoxPainter oldDelegate) {
+    return oldDelegate.detections != detections;
   }
 }
