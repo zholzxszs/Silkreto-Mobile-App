@@ -93,15 +93,13 @@ class _HomeSectionState extends State<HomeSection> {
         final monthName = _months[date.month - 1];
 
         if (!analytics.containsKey(monthName)) {
-          analytics[monthName] = {'healthy': 0, 'grasserie': 0, 'flacherie': 0};
+          analytics[monthName] = {'healthy': 0, 'diseased': 0};
         }
 
         analytics[monthName]!['healthy'] =
             (analytics[monthName]!['healthy'] ?? 0) + result.healthyCount;
-        analytics[monthName]!['grasserie'] =
-            (analytics[monthName]!['grasserie'] ?? 0) + result.grasserieCount;
-        analytics[monthName]!['flacherie'] =
-            (analytics[monthName]!['flacherie'] ?? 0) + result.flacherieCount;
+        analytics[monthName]!['diseased'] =
+            (analytics[monthName]!['diseased'] ?? 0) + result.diseasedCount;
       } catch (e) {
         // Ignore records with parsing errors
       }
@@ -318,7 +316,7 @@ class _HomeSectionState extends State<HomeSection> {
                         'Sapilang, Bacnotan, La Union',
                         style: GoogleFonts.sourceSansPro(
                           color: const Color(0xFF2F2F2F),
-                          fontSize: 8,
+                          fontSize: 10,
                           fontWeight: FontWeight.w400,
                         ),
                       ),
@@ -343,8 +341,8 @@ class _HomeSectionState extends State<HomeSection> {
                         text: '11 Nov, 2025',
                         style: GoogleFonts.sourceSansPro(
                           color: const Color(0xCC5B532C),
-                          fontSize: 8,
-                          fontWeight: FontWeight.w300,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w400,
                         ),
                       ),
                     ],
@@ -414,7 +412,7 @@ class _HomeSectionState extends State<HomeSection> {
             child: SizedBox(
               width: (width - 42) * 0.4,
               child: Text(
-                'Sunny weather may compromise the Silkworm, Grasserie and Flacherie diseases may occur.',
+                'Sunny weather may compromise the Silkworm, Diseased may occur.',
                 textAlign: TextAlign.justify,
                 style: GoogleFonts.sourceSansPro(
                   color: const Color(0xFF5B532C),
@@ -639,16 +637,12 @@ class _HomeSectionState extends State<HomeSection> {
             Column(
               children: sortedMonths.map<Widget>((monthName) {
                 final data = _monthlyAnalytics[monthName]!;
-                final total =
-                    data['healthy']! + data['grasserie']! + data['flacherie']!;
+                final total = data['healthy']! + data['diseased']!;
                 final healthyPercent = total > 0
                     ? (data['healthy']! * 100 / total).round()
                     : 0;
-                final grasseriePercent = total > 0
-                    ? (data['grasserie']! * 100 / total).round()
-                    : 0;
-                final flacheriePercent = total > 0
-                    ? (data['flacherie']! * 100 / total).round()
+                final diseasedPercent = total > 0
+                    ? (data['diseased']! * 100 / total).round()
                     : 0;
 
                 return Column(
@@ -656,8 +650,7 @@ class _HomeSectionState extends State<HomeSection> {
                     _buildMonthCard(
                       monthName,
                       healthyPercent,
-                      grasseriePercent,
-                      flacheriePercent,
+                      diseasedPercent,
                       cardWidth,
                     ),
                     const SizedBox(height: 12),
@@ -679,9 +672,7 @@ class _HomeSectionState extends State<HomeSection> {
         children: [
           _buildLollipopLegendItem('Healthy', const Color(0xFF66A060)),
           const SizedBox(width: 14),
-          _buildLollipopLegendItem('Grasserie', const Color(0xFFE84A4A)),
-          const SizedBox(width: 14),
-          _buildLollipopLegendItem('Flacherie', const Color(0xFFB05CC5)),
+          _buildLollipopLegendItem('Diseased', const Color(0xFFE84A4A)),
         ],
       ),
     );
@@ -729,8 +720,7 @@ class _HomeSectionState extends State<HomeSection> {
   Widget _buildMonthCard(
     String month,
     int healthy,
-    int npv,
-    int flacherie,
+    int diseased,
     double width,
   ) {
     return Container(
@@ -783,37 +773,22 @@ class _HomeSectionState extends State<HomeSection> {
                             '$healthy%',
                             style: GoogleFonts.nunito(
                               color: const Color(0xFF66A060),
-                              fontSize: 10,
+                              fontSize: 12,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
                       ),
                       SizedBox(width: 2),
-                      // NPV segment space
+                      // Diseased segment space
                       Expanded(
-                        flex: npv,
+                        flex: diseased,
                         child: Center(
                           child: Text(
-                            '$npv%',
+                            '$diseased%',
                             style: GoogleFonts.nunito(
                               color: const Color(0xFFE84A4A),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 2),
-                      // Flacherie segment space
-                      Expanded(
-                        flex: flacherie,
-                        child: Center(
-                          child: Text(
-                            '$flacherie%',
-                            style: GoogleFonts.nunito(
-                              color: const Color(0xFFB05CC5),
-                              fontSize: 10,
+                              fontSize: 12,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -841,22 +816,11 @@ class _HomeSectionState extends State<HomeSection> {
               ),
               const SizedBox(width: 2),
               Expanded(
-                flex: npv,
+                flex: diseased,
                 child: Container(
                   height: 3,
                   decoration: BoxDecoration(
                     color: const Color(0xFFE84A4A),
-                    borderRadius: BorderRadius.circular(1.5),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 2),
-              Expanded(
-                flex: flacherie,
-                child: Container(
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFB05CC5),
                     borderRadius: BorderRadius.circular(1.5),
                   ),
                 ),
