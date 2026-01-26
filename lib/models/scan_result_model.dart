@@ -2,12 +2,11 @@ class ScanResult {
   final int? id;
   final String rawImagePath;
   final String? annotatedImagePath;
-  final String status; // 'Healthy', 'Grasserie', 'Flacherie'
+  final String status; // 'Healthy', 'Diseased'
   final String scanDate;
   final String scanTime;
   final int healthyCount;
-  final int grasserieCount;
-  final int flacherieCount;
+  final int diseasedCount;
   final DateTime? createdAt;
 
   ScanResult({
@@ -18,8 +17,7 @@ class ScanResult {
     required this.scanDate,
     required this.scanTime,
     this.healthyCount = 0,
-    this.grasserieCount = 0,
-    this.flacherieCount = 0,
+    this.diseasedCount = 0,
     this.createdAt,
   });
 
@@ -33,8 +31,7 @@ class ScanResult {
       'scan_date': scanDate,
       'scan_time': scanTime,
       'healthy_count': healthyCount,
-      'grasserie_count': grasserieCount,
-      'flacherie_count': flacherieCount,
+      'diseased_count': diseasedCount,
       'created_at': createdAt?.toIso8601String(),
     };
   }
@@ -49,8 +46,7 @@ class ScanResult {
       scanDate: map['scan_date'] as String,
       scanTime: map['scan_time'] as String,
       healthyCount: map['healthy_count'] as int? ?? 0,
-      grasserieCount: map['grasserie_count'] as int? ?? 0,
-      flacherieCount: map['flacherie_count'] as int? ?? 0,
+      diseasedCount: map['diseased_count'] as int? ?? 0,
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at'] as String)
           : null,
@@ -66,8 +62,7 @@ class ScanResult {
     String? scanDate,
     String? scanTime,
     int? healthyCount,
-    int? grasserieCount,
-    int? flacherieCount,
+    int? diseasedCount,
     DateTime? createdAt,
   }) {
     return ScanResult(
@@ -78,14 +73,13 @@ class ScanResult {
       scanDate: scanDate ?? this.scanDate,
       scanTime: scanTime ?? this.scanTime,
       healthyCount: healthyCount ?? this.healthyCount,
-      grasserieCount: grasserieCount ?? this.grasserieCount,
-      flacherieCount: flacherieCount ?? this.flacherieCount,
+      diseasedCount: diseasedCount ?? this.diseasedCount,
       createdAt: createdAt ?? this.createdAt,
     );
   }
 
   @override
   String toString() {
-    return 'ScanResult(id: $id, status: $status, date: $scanDate, time: $scanTime, healthy: $healthyCount, grasserie: $grasserieCount, flacherie: $flacherieCount)';
+    return 'ScanResult(id: $id, status: $status, date: $scanDate, time: $scanTime, healthy: $healthyCount, diseased: $diseasedCount)';
   }
 }
