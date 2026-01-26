@@ -339,6 +339,7 @@ class _HistorySectionState extends State<HistorySection> {
   }
 
   Widget _buildHistoryCard(BuildContext context, ScanResult scanResult) {
+    final imagePath = scanResult.annotatedImagePath ?? scanResult.rawImagePath;
     return Container(
       height: 80,
       margin: const EdgeInsets.only(bottom: 15),
@@ -361,21 +362,21 @@ class _HistorySectionState extends State<HistorySection> {
         children: [
           const SizedBox(width: 15),
           GestureDetector(
-            onTap: () => _showImagePreview(context, scanResult.rawImagePath),
+            onTap: () => _showImagePreview(context, imagePath),
             child: Container(
               width: 60,
               height: 60,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
                 color: const Color(0xFFD9D9D9),
-                image: File(scanResult.rawImagePath).existsSync()
+                image: File(imagePath).existsSync()
                     ? DecorationImage(
-                        image: FileImage(File(scanResult.rawImagePath)),
+                        image: FileImage(File(imagePath)),
                         fit: BoxFit.cover,
                       )
                     : null,
               ),
-              child: !File(scanResult.rawImagePath).existsSync()
+              child: !File(imagePath).existsSync()
                   ? const Icon(Icons.image_not_supported, color: Colors.grey)
                   : null,
             ),
@@ -419,14 +420,8 @@ class _HistorySectionState extends State<HistorySection> {
                     ),
                     const SizedBox(width: 8),
                     _buildCountChip(
-                      'Grasserie: ${scanResult.grasserieCount}',
+                      'Diseased: ${scanResult.diseasedCount}',
                       const Color(0xFFF44336),
-                      Colors.white,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildCountChip(
-                      'Flacherie: ${scanResult.flacherieCount}',
-                      const Color(0xFF9C27B0),
                       Colors.white,
                     ),
                   ],
