@@ -162,7 +162,7 @@ class _UploadSectionState extends State<UploadSection> {
                       child: CustomPaint(
                         painter: YoloBoxPainter(
                           detections: _detections,
-                          labels: const ['H', 'D'],
+                          labels: const ['Healthy', 'Diseased'],
                         ),
                       ),
                     ),
@@ -453,7 +453,7 @@ class _UploadSectionState extends State<UploadSection> {
                       ],
                     ),
 
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 12),
 
                     if (_image != null)
                       Row(
@@ -546,6 +546,10 @@ class _UploadSectionState extends State<UploadSection> {
                         ],
                       ),
 
+                    const SizedBox(height: 14),
+
+                    _buildDecisionSupportCard(),
+
                     const SizedBox(height: 160),
                   ],
                 ),
@@ -562,6 +566,323 @@ class _UploadSectionState extends State<UploadSection> {
             right: 42,
             child: _buildBottomNavigation(screenWidth),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDecisionSupportCard() {
+    final int? hRaw = healthyCount;
+    final int? dRaw = diseasedCount;
+
+    // Show only AFTER analysis produces counts.
+    if (hRaw == null && dRaw == null) {
+      return const SizedBox.shrink();
+    }
+
+    final int h = hRaw ?? 0;
+    final int d = dRaw ?? 0;
+    final int total = h + d;
+
+    if (total == 0) {
+      return const SizedBox.shrink();
+    }
+
+    final double ratio = d / total;
+
+    String riskLabel;
+    String headline;
+    List<String> tips;
+
+    // Dynamic pill background color (soft + modern).
+    Color pillBg;
+    Color pillFg;
+
+    if (d == 0) {
+      riskLabel = 'LOW RISK';
+      pillBg = const Color(0xFFE6F4EA); // soft green
+      pillFg = const Color(0xFF1E7A3B);
+      headline =
+          'Many signs look healthy so far. Keep conditions steady and consistent.';
+      tips = const [
+        'Clean trays/tools daily and remove leftover leaves and waste.',
+        'Feed fresh, dry leaves; avoid wet or wilted leaves.',
+        'Keep airflow gentle and stable; avoid sudden changes.',
+        'Avoid overcrowding as larvae grow—give them space.',
+        'Check daily and note anything unusual early.',
+      ];
+    } else if (ratio < 0.10) {
+      riskLabel = 'MILD RISK';
+      pillBg = const Color(0xFFE7F3F7); // soft teal
+      pillFg = const Color(0xFF0B5F73);
+      headline =
+          'Many are healthy, but a few look diseased. Small changes now can help prevent spread.';
+      tips = const [
+        'Separate weak/diseased-looking worms if possible.',
+        'Wipe/clean rearing area and tools before each feeding.',
+        'Keep leaves clean and dry; avoid overfeeding.',
+        'Reduce crowding and improve gentle ventilation.',
+        'Monitor twice daily for any rapid changes.',
+      ];
+    } else if (ratio < 0.25) {
+      riskLabel = 'MODERATE RISK';
+      pillBg = const Color(0xFFFFF3E0); // soft orange
+      pillFg = const Color(0xFF9A4D00);
+      headline =
+          'Many show possible disease signs. Focus on cleanliness, spacing, and stable conditions.';
+      tips = const [
+        'Isolate suspected diseased worms and dispose waste carefully.',
+        'Clean trays more often and keep bedding dry.',
+        'Feed smaller portions more frequently to avoid spoilage.',
+        'Improve airflow (no strong drafts) and avoid sudden temperature swings.',
+        'Record what you changed so you can see what helps.',
+      ];
+    } else {
+      riskLabel = 'HIGH RISK';
+      pillBg = const Color(0xFFFDEAEA); // soft red
+      pillFg = const Color(0xFF9B1C1C);
+      headline =
+          'Many appear diseased. Prioritize isolation, sanitation, and a stable environment to reduce losses.';
+      tips = const [
+        'Separate diseased worms immediately and clean the area thoroughly.',
+        'Remove spoiled leaves/waste promptly; keep trays dry.',
+        'Avoid crowding—spread worms into more trays if possible.',
+        'Keep temperature/humidity steady and ensure gentle airflow.',
+        'Consider restarting with healthier stock if the batch continues to worsen.',
+      ];
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.6),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  'TIPS & RECOMMENDATIONS',
+                  style: GoogleFonts.nunito(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: pillBg,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  riskLabel,
+                  style: GoogleFonts.nunito(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: pillFg,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            headline,
+            style: GoogleFonts.nunito(
+              fontSize: 13.5,
+              height: 1.3,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...tips.map(
+            (t) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 7),
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacity(0.8),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      t,
+                      style: GoogleFonts.nunito(
+                        fontSize: 13,
+                        height: 1.35,
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<Widget> _InfoCard({
+    required String title,
+    required String subtitle,
+    required String severityLabel,
+    List<String> bullets = const [],
+    required dynamic scheme,
+  }) async {
+    // Dynamic background color based on severity
+    Color bgColor;
+    Color textColor;
+    if (severityLabel == 'Low risk') {
+      bgColor = const Color(0xFFC8E6C9); // Light green
+      textColor = const Color(0xFF1B5E20);
+    } else if (severityLabel == 'Mild risk') {
+      bgColor = const Color(0xFFFFF9C4); // Light yellow
+      textColor = const Color(0xFF664D03);
+    } else if (severityLabel == 'Moderate risk') {
+      bgColor = const Color(0xFFFFE0B2); // Light orange
+      textColor = const Color(0xFF663C00);
+    } else {
+      bgColor = const Color(0xFFFFCDD2); // Light red
+      textColor = const Color(0xFFC62828);
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bgColor.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: bgColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.nunito(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: bgColor.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  severityLabel,
+                  style: GoogleFonts.nunito(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            subtitle,
+            style: GoogleFonts.nunito(
+              fontSize: 13.5,
+              height: 1.35,
+              color: textColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (bullets.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            for (final b in bullets) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Icon(
+                      Icons.check_circle_outline_rounded,
+                      size: 18,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      b,
+                      style: GoogleFonts.nunito(
+                        fontSize: 13.5,
+                        height: 1.35,
+                        color: textColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+            ],
+          ],
+          if (bullets.isNotEmpty)
+            Text(
+              'Note: These are general, non-expert tips—not a medical diagnosis.',
+              style: GoogleFonts.nunito(
+                fontSize: 12.5,
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
         ],
       ),
     );
