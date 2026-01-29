@@ -148,7 +148,7 @@ class _ScanSectionState extends State<ScanSection> {
                       child: CustomPaint(
                         painter: YoloBoxPainter(
                           detections: _detections,
-                          labels: const ['Healthy', 'Diseased'],
+                          labels: const ['H', 'D'],
                         ),
                       ),
                     ),

@@ -162,7 +162,7 @@ class _UploadSectionState extends State<UploadSection> {
                       child: CustomPaint(
                         painter: YoloBoxPainter(
                           detections: _detections,
-                          labels: const ['Healthy', 'Diseased'],
+                          labels: const ['H', 'D'],
                         ),
                       ),
                     ),
