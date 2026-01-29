@@ -273,7 +273,24 @@ class _ScanSectionState extends State<ScanSection> {
               x2: x2,
               y2: y2,
               color: color,
-              thickness: 2.5,
+              thickness: 3, // ✅ int
+            );
+
+            final label = d.classId == 0 ? 'H' : 'D';
+
+            // label bg
+            const int padX = 6;
+            const int padY = 2; // ✅ better alignment for arial14
+            final int labelX = x1;
+            final int labelY = max(0, y1 - 18);
+
+            img.drawString(
+              canvas,
+              label,
+              font: img.arial14,
+              x: labelX + padX,
+              y: labelY + padY,
+              color: color,
             );
           }
 
