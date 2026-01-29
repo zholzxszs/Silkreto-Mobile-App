@@ -1,9 +1,14 @@
 import 'dart:io';
+import 'dart:math';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+
 import '../database/database_helper.dart';
 import '../models/scan_result_model.dart';
+import '../services/tflite_model_service.dart';
 
 class HistorySection extends StatefulWidget {
   const HistorySection({super.key});
@@ -16,6 +21,7 @@ class _HistorySectionState extends State<HistorySection> {
   final ScrollController _scrollController = ScrollController();
   bool _navVisible = true;
   double _previousOffset = 0.0;
+
   List<ScanResult> _allScanResults = [];
   List<ScanResult> _filteredScanResults = [];
   List<int> _availableYears = [];
@@ -47,11 +53,12 @@ class _HistorySectionState extends State<HistorySection> {
   void _loadScanResults() async {
     final results = await DatabaseHelper().getAllScanResults();
     final dateFormat = DateFormat('MMM dd, yyyy');
+
     final years = results
         .map((r) {
           try {
             return dateFormat.parse(r.scanDate).year;
-          } catch (e) {
+          } catch (_) {
             return null;
           }
         })
@@ -60,7 +67,7 @@ class _HistorySectionState extends State<HistorySection> {
         .toSet()
         .toList();
 
-    years.sort((a, b) => b.compareTo(a)); // Sort descending
+    years.sort((a, b) => b.compareTo(a));
 
     final now = DateTime.now();
 
@@ -68,14 +75,12 @@ class _HistorySectionState extends State<HistorySection> {
       _allScanResults = results;
       _availableYears = years;
 
-      // Set initial selected year to current year if available, otherwise latest
       if (years.contains(now.year)) {
         _selectedYear = now.year;
       } else if (years.isNotEmpty) {
         _selectedYear = years.first;
       }
 
-      // Set initial selected month to current month
       _selectedMonth = _months[now.month - 1];
 
       _filterResults();
@@ -84,6 +89,7 @@ class _HistorySectionState extends State<HistorySection> {
 
   void _filterResults() {
     final dateFormat = DateFormat('MMM dd, yyyy');
+
     if (_selectedYear == null) {
       _filteredScanResults = _allScanResults;
     } else {
@@ -95,25 +101,22 @@ class _HistorySectionState extends State<HistorySection> {
               _selectedMonth == null ||
               (date.month) == (_months.indexOf(_selectedMonth!) + 1);
           return yearMatches && monthMatches;
-        } catch (e) {
+        } catch (_) {
           return false;
         }
       }).toList();
     }
+
     setState(() {});
   }
 
-  // ────────────────────────────────────────────────
-  //  Modified: Added confirmation dialog before delete
-  // ────────────────────────────────────────────────
   Future<void> _deleteScanResult(int id) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Record'),
         content: const Text(
-          'Are you sure you want to delete this record?\n'
-          'This action cannot be undone.',
+          'Are you sure you want to delete this record?\nThis action cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -130,7 +133,7 @@ class _HistorySectionState extends State<HistorySection> {
 
     if (confirm == true) {
       await DatabaseHelper().deleteScanResult(id);
-      _loadScanResults(); // Refresh the list
+      _loadScanResults();
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -139,21 +142,152 @@ class _HistorySectionState extends State<HistorySection> {
     }
   }
 
-  void _showImagePreview(BuildContext context, String imagePath) {
+  // ✅ ScanSection-style preview modal (with legends + counts + labels + same Close button)
+  void _showImagePreviewFromHistory(
+    BuildContext context,
+    ScanResult scanResult,
+  ) {
+    final previewPath =
+        scanResult.annotatedImagePath ?? scanResult.rawImagePath;
+
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Image.file(File(imagePath)),
-            TextButton(
-              child: const Text('Close'),
-              onPressed: () => Navigator.of(context).pop(),
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.65),
+      builder: (_) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 18,
+            vertical: 24,
+          ),
+          backgroundColor: Colors.transparent,
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Preview Card (same as ScanSection)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.25),
+                        blurRadius: 22,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header + Legends
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${scanResult.scanDate} • ${scanResult.scanTime}',
+                              style: GoogleFonts.nunito(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF253D24),
+                              ),
+                            ),
+                          ),
+                          _legendChip(
+                            color: const Color(0xFF66A060),
+                            label: 'Healthy',
+                          ),
+                          const SizedBox(width: 8),
+                          _legendChip(
+                            color: const Color(0xFFE84A4A),
+                            label: 'Diseased',
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Image (square)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: AspectRatio(
+                          aspectRatio: 1,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.file(File(previewPath), fit: BoxFit.cover),
+
+                              // Counts overlay (same as ScanSection)
+                              Positioned(
+                                left: 10,
+                                top: 10,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.45),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    'H: ${scanResult.healthyCount}   D: ${scanResult.diseasedCount}',
+                                    style: GoogleFonts.nunito(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white,
+                                      shadows: const [
+                                        Shadow(
+                                          blurRadius: 2,
+                                          color: Colors.black54,
+                                          offset: Offset(0, 1),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                // Close button (same as ScanSection)
+                SizedBox(
+                  width: 160,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF63A361),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    child: Text(
+                      'Close',
+                      style: GoogleFonts.nunito(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -161,6 +295,7 @@ class _HistorySectionState extends State<HistorySection> {
     if (!_scrollController.hasClients) return;
     final offset = _scrollController.offset;
     const threshold = 6.0;
+
     if (offset - _previousOffset > threshold && _navVisible) {
       setState(() => _navVisible = false);
     } else if (_previousOffset - offset > threshold && !_navVisible) {
@@ -340,6 +475,7 @@ class _HistorySectionState extends State<HistorySection> {
 
   Widget _buildHistoryCard(BuildContext context, ScanResult scanResult) {
     final imagePath = scanResult.annotatedImagePath ?? scanResult.rawImagePath;
+
     return Container(
       height: 80,
       margin: const EdgeInsets.only(bottom: 15),
@@ -362,7 +498,7 @@ class _HistorySectionState extends State<HistorySection> {
         children: [
           const SizedBox(width: 15),
           GestureDetector(
-            onTap: () => _showImagePreview(context, imagePath),
+            onTap: () => _showImagePreviewFromHistory(context, scanResult),
             child: Container(
               width: 60,
               height: 60,
@@ -394,16 +530,16 @@ class _HistorySectionState extends State<HistorySection> {
                       '${scanResult.scanDate} at ${scanResult.scanTime}',
                       style: GoogleFonts.nunito(
                         color: Colors.white,
-                        fontSize: 12,
+                        fontSize: 10,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     SizedBox(
-                      height: 24, // Constrain height
-                      width: 24, // Constrain width
+                      height: 24,
+                      width: 24,
                       child: IconButton(
-                        padding: EdgeInsets.zero, // Remove default padding
-                        iconSize: 20, // Adjust icon size
+                        padding: EdgeInsets.zero,
+                        iconSize: 20,
                         icon: const Icon(Icons.delete, color: Colors.redAccent),
                         onPressed: () => _deleteScanResult(scanResult.id!),
                       ),
@@ -453,6 +589,28 @@ class _HistorySectionState extends State<HistorySection> {
     );
   }
 
+  Widget _legendChip({required Color color, required String label}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: GoogleFonts.nunito(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w900,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildBottomNavigation(double width) {
     final navItems = [
       {'icon': Icons.home_outlined, 'label': 'Home', 'route': '/home'},
@@ -490,12 +648,11 @@ class _HistorySectionState extends State<HistorySection> {
         children: navItems.asMap().entries.map<Widget>((entry) {
           final item = entry.value;
           final isActive = item['label'] == 'History';
+
           return GestureDetector(
             onTap: () {
               final route = item['route'] as String?;
               if (route == null || route == '/history') return;
-
-              // Basic navigation
               Navigator.pushNamed(context, route);
             },
             child: Container(
@@ -528,5 +685,89 @@ class _HistorySectionState extends State<HistorySection> {
         }).toList(),
       ),
     );
+  }
+}
+
+class YoloBoxPainter extends CustomPainter {
+  final List<Detection> detections;
+  final List<String> labels;
+
+  YoloBoxPainter({required this.detections, required this.labels});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (detections.isEmpty) return;
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+
+    final textPainter = TextPainter(textDirection: ui.TextDirection.ltr);
+
+    final bool isNormalized = detections.every(
+      (d) =>
+          d.x1.abs() <= 1.5 &&
+          d.y1.abs() <= 1.5 &&
+          d.x2.abs() <= 1.5 &&
+          d.y2.abs() <= 1.5,
+    );
+
+    for (final d in detections) {
+      paint.color = (d.classId == 0)
+          ? const Color(0xFF66A060)
+          : const Color(0xFFE84A4A);
+
+      double x1 = d.x1, y1 = d.y1, x2 = d.x2, y2 = d.y2;
+
+      if (isNormalized) {
+        x1 *= size.width;
+        x2 *= size.width;
+        y1 *= size.height;
+        y2 *= size.height;
+      } else {
+        x1 = x1 / 640.0 * size.width;
+        x2 = x2 / 640.0 * size.width;
+        y1 = y1 / 640.0 * size.height;
+        y2 = y2 / 640.0 * size.height;
+      }
+
+      final rect = Rect.fromLTRB(
+        x1.clamp(0.0, size.width),
+        y1.clamp(0.0, size.height),
+        x2.clamp(0.0, size.width),
+        y2.clamp(0.0, size.height),
+      );
+
+      canvas.drawRect(rect, paint);
+
+      final label = (d.classId >= 0 && d.classId < labels.length)
+          ? labels[d.classId]
+          : 'Class ${d.classId}';
+
+      textPainter.text = TextSpan(
+        text: label,
+        style: TextStyle(
+          color: paint.color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          // ✅ no grayish background
+          shadows: const [
+            Shadow(blurRadius: 3, color: Colors.black54, offset: Offset(0, 1)),
+          ],
+        ),
+      );
+      textPainter.layout();
+
+      final textOffset = Offset(
+        rect.left,
+        max(0, rect.top - textPainter.height),
+      );
+      textPainter.paint(canvas, textOffset);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant YoloBoxPainter oldDelegate) {
+    return oldDelegate.detections != detections;
   }
 }
