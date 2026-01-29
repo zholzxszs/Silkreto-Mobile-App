@@ -572,8 +572,8 @@ class _ScanSectionState extends State<ScanSection> {
 
     if (d == 0) {
       riskLabel = 'LOW RISK';
-      pillBg = const Color(0xFFE6F4EA); // soft green
-      pillFg = const Color(0xFF1E7A3B);
+      pillBg = const Color(0xFF2E7D32); // strong green
+      pillFg = Colors.white;
       headline =
           'Many signs look healthy so far. Keep conditions steady and consistent.';
       tips = const [
@@ -585,8 +585,8 @@ class _ScanSectionState extends State<ScanSection> {
       ];
     } else if (ratio < 0.10) {
       riskLabel = 'MILD RISK';
-      pillBg = const Color(0xFFE7F3F7); // soft teal
-      pillFg = const Color(0xFF0B5F73);
+      pillBg = const Color(0xFF00796B); // strong teal
+      pillFg = Colors.white;
       headline =
           'Many are healthy, but a few look diseased. Small changes now can help prevent spread.';
       tips = const [
@@ -598,8 +598,8 @@ class _ScanSectionState extends State<ScanSection> {
       ];
     } else if (ratio < 0.25) {
       riskLabel = 'MODERATE RISK';
-      pillBg = const Color(0xFFFFF3E0); // soft orange
-      pillFg = const Color(0xFF9A4D00);
+      pillBg = const Color(0xFFF57C00); // strong orange
+      pillFg = Colors.white;
       headline =
           'Many show possible disease signs. Focus on cleanliness, spacing, and stable conditions.';
       tips = const [
@@ -611,8 +611,8 @@ class _ScanSectionState extends State<ScanSection> {
       ];
     } else {
       riskLabel = 'HIGH RISK';
-      pillBg = const Color(0xFFFDEAEA); // soft red
-      pillFg = const Color(0xFF9B1C1C);
+      pillBg = const Color(0xFFC62828); // strong red (similar to Reupload)
+      pillFg = Colors.white;
       headline =
           'Many appear diseased. Prioritize isolation, sanitation, and a stable environment to reduce losses.';
       tips = const [
@@ -644,9 +644,26 @@ class _ScanSectionState extends State<ScanSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          /// HEADER ROW
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Silkworm / Nature icon (low saturation)
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF447042),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.grass_rounded, // closest clean silkworm/nature vibe
+                  size: 18,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 10),
+
+              // Title
               Expanded(
                 child: Text(
                   'TIPS & RECOMMENDATIONS',
@@ -658,13 +675,15 @@ class _ScanSectionState extends State<ScanSection> {
                   ),
                 ),
               ),
+
+              // Risk pill (NO ICON)
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
+                  horizontal: 14,
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: pillBg,
+                  color: pillBg, // green-tuned outside
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
@@ -679,41 +698,50 @@ class _ScanSectionState extends State<ScanSection> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+
+          const SizedBox(height: 12),
+
+          /// HEADLINE (NO ICON)
           Text(
             headline,
             style: GoogleFonts.nunito(
               fontSize: 13.5,
-              height: 1.3,
+              height: 1.4,
               fontWeight: FontWeight.w600,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 12),
+
+          const SizedBox(height: 14),
+
+          /// TIPS LIST
           ...tips.map(
             (t) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.only(bottom: 10),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Soft green check
                   Container(
-                    margin: const EdgeInsets.only(top: 7),
-                    width: 6,
-                    height: 6,
+                    margin: const EdgeInsets.only(top: 2),
+                    padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withOpacity(0.8),
+                      color: const Color(0xFF63A361),
                       shape: BoxShape.circle,
                     ),
+                    child: Icon(
+                      Icons.check_rounded,
+                      size: 14,
+                      color: Colors.white,
+                    ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       t,
                       style: GoogleFonts.nunito(
                         fontSize: 13,
-                        height: 1.35,
+                        height: 1.4,
                         color: Theme.of(context).colorScheme.onSurface,
                         fontWeight: FontWeight.w600,
                       ),
