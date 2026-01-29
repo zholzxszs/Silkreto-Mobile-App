@@ -2,10 +2,10 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import '../database/database_helper.dart';
 import '../models/scan_result_model.dart';
 import '../services/tflite_model_service.dart';
+import 'square_camera_screen.dart';
 
 class ScanSection extends StatefulWidget {
   const ScanSection({super.key});
@@ -22,8 +23,6 @@ class ScanSection extends StatefulWidget {
 }
 
 class _ScanSectionState extends State<ScanSection> {
-  final ImagePicker _picker = ImagePicker();
-
   XFile? _image;
   bool _isProcessing = false; // analyzing
   bool _isSaving = false;
@@ -48,7 +47,7 @@ class _ScanSectionState extends State<ScanSection> {
       try {
         await TFLiteModelService().ensureInitialized();
       } catch (_) {}
-      await _pickFromCamera();
+      await _openSquareCamera();
     });
   }
 
@@ -65,38 +64,40 @@ class _ScanSectionState extends State<ScanSection> {
     _previousOffset = offset;
   }
 
-  Future<void> _pickFromCamera() async {
+  /// ✅ Uses your custom camera screen (locked 1:1)
+  Future<void> _openSquareCamera() async {
     try {
-      final picked = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 640,
-        maxHeight: 640,
-        imageQuality: 85,
+      final path = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(builder: (_) => const SquareCameraScreen()),
       );
 
-      if (picked != null && mounted) {
-        setState(() {
-          _isProcessing = true;
-          _image = picked;
-          healthyCount = null;
-          diseasedCount = null;
-          _detections = const [];
-          _lastPrediction = null;
-        });
-
-        // ✅ let UI paint overlay first
-        await Future.delayed(const Duration(milliseconds: 16));
-
-        await _analyzeCurrentImage();
-      } else {
-        if (mounted) Navigator.of(context).pop();
+      // if user backed out / canceled
+      if (!mounted) return;
+      if (path == null) {
+        Navigator.of(context).pop();
+        return;
       }
+
+      setState(() {
+        _isProcessing = true;
+        _image = XFile(
+          path,
+        ); // ✅ already square (and ideally 640x640 from your fixed camera)
+        healthyCount = null;
+        diseasedCount = null;
+        _detections = const [];
+        _lastPrediction = null;
+      });
+
+      // let UI paint
+      await Future.delayed(const Duration(milliseconds: 16));
+      await _analyzeCurrentImage();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Camera error: $e')));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Camera error: $e')));
     }
   }
 
@@ -129,6 +130,7 @@ class _ScanSectionState extends State<ScanSection> {
   Widget _buildPreviewWithBoxes() {
     if (_image == null) return const SizedBox.shrink();
 
+    // Since camera output is square, show it as square too.
     return Stack(
       children: [
         Positioned.fill(
@@ -194,7 +196,7 @@ class _ScanSectionState extends State<ScanSection> {
 
   Future<void> _retake() async {
     setState(() => _image = null);
-    await _pickFromCamera();
+    await _openSquareCamera();
   }
 
   Future<void> _confirmAndSave() async {
@@ -232,9 +234,9 @@ class _ScanSectionState extends State<ScanSection> {
       String? annotatedImagePath;
       if (prediction.detections.isNotEmpty) {
         final bytes = File(newImage.path).readAsBytesSync();
-        final image = img.decodeImage(bytes);
-        if (image != null) {
-          final canvas = img.Image.from(image);
+        final imageDecoded = img.decodeImage(bytes);
+        if (imageDecoded != null) {
+          final canvas = img.Image.from(imageDecoded);
 
           for (final d in prediction.detections) {
             final color = d.classId == 0
@@ -248,21 +250,21 @@ class _ScanSectionState extends State<ScanSection> {
                 d.y2.abs() <= 1.5;
 
             final x1 =
-                (isNorm ? d.x1 * image.width : d.x1 / 640.0 * image.width)
+                (isNorm ? d.x1 * canvas.width : d.x1 / 640.0 * canvas.width)
                     .toInt()
-                    .clamp(0, image.width - 1);
+                    .clamp(0, canvas.width - 1);
             final y1 =
-                (isNorm ? d.y1 * image.height : d.y1 / 640.0 * image.height)
+                (isNorm ? d.y1 * canvas.height : d.y1 / 640.0 * canvas.height)
                     .toInt()
-                    .clamp(0, image.height - 1);
+                    .clamp(0, canvas.height - 1);
             final x2 =
-                (isNorm ? d.x2 * image.width : d.x2 / 640.0 * image.width)
+                (isNorm ? d.x2 * canvas.width : d.x2 / 640.0 * canvas.width)
                     .toInt()
-                    .clamp(0, image.width - 1);
+                    .clamp(0, canvas.width - 1);
             final y2 =
-                (isNorm ? d.y2 * image.height : d.y2 / 640.0 * image.height)
+                (isNorm ? d.y2 * canvas.height : d.y2 / 640.0 * canvas.height)
                     .toInt()
-                    .clamp(0, image.height - 1);
+                    .clamp(0, canvas.height - 1);
 
             img.drawRect(
               canvas,
@@ -389,7 +391,7 @@ class _ScanSectionState extends State<ScanSection> {
                                   ),
                                   const SizedBox(height: 24),
                                   ElevatedButton(
-                                    onPressed: _pickFromCamera,
+                                    onPressed: _openSquareCamera,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF63A361),
                                       foregroundColor: Colors.white,
@@ -408,7 +410,9 @@ class _ScanSectionState extends State<ScanSection> {
                             )
                           : _buildPreviewWithBoxes(),
                     ),
+
                     const SizedBox(height: 24),
+
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
@@ -430,7 +434,9 @@ class _ScanSectionState extends State<ScanSection> {
                         ),
                       ],
                     ),
+
                     const SizedBox(height: 12),
+
                     if (_image != null)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -521,14 +527,18 @@ class _ScanSectionState extends State<ScanSection> {
                           ),
                         ],
                       ),
+
                     const SizedBox(height: 14),
+
                     _buildDecisionSupportCard(),
+
                     const SizedBox(height: 160),
                   ],
                 ),
               ),
             ],
           ),
+
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
             bottom: _navVisible
@@ -543,22 +553,20 @@ class _ScanSectionState extends State<ScanSection> {
     );
   }
 
+  // --- Your existing tips card + header + bottom nav remain unchanged ---
+  // (I kept your _buildDecisionSupportCard(), _buildHeader(), _buildBottomNavigation(), YoloBoxPainter below)
+
   Widget _buildDecisionSupportCard() {
     final int? hRaw = healthyCount;
     final int? dRaw = diseasedCount;
 
-    // Show only AFTER analysis produces counts.
-    if (hRaw == null && dRaw == null) {
-      return const SizedBox.shrink();
-    }
+    if (hRaw == null && dRaw == null) return const SizedBox.shrink();
 
     final int h = hRaw ?? 0;
     final int d = dRaw ?? 0;
     final int total = h + d;
 
-    if (total == 0) {
-      return const SizedBox.shrink();
-    }
+    if (total == 0) return const SizedBox.shrink();
 
     final double ratio = d / total;
 
@@ -566,13 +574,12 @@ class _ScanSectionState extends State<ScanSection> {
     String headline;
     List<String> tips;
 
-    // Dynamic pill background color (soft + modern).
     Color pillBg;
     Color pillFg;
 
     if (d == 0) {
       riskLabel = 'LOW RISK';
-      pillBg = const Color(0xFF2E7D32); // strong green
+      pillBg = const Color(0xFF2E7D32);
       pillFg = Colors.white;
       headline =
           'Many signs look healthy so far. Keep conditions steady and consistent.';
@@ -585,7 +592,7 @@ class _ScanSectionState extends State<ScanSection> {
       ];
     } else if (ratio < 0.10) {
       riskLabel = 'MILD RISK';
-      pillBg = const Color(0xFF00796B); // strong teal
+      pillBg = const Color(0xFF00796B);
       pillFg = Colors.white;
       headline =
           'Many are healthy, but a few look diseased. Small changes now can help prevent spread.';
@@ -598,7 +605,7 @@ class _ScanSectionState extends State<ScanSection> {
       ];
     } else if (ratio < 0.25) {
       riskLabel = 'MODERATE RISK';
-      pillBg = const Color(0xFFF57C00); // strong orange
+      pillBg = const Color(0xFFF57C00);
       pillFg = Colors.white;
       headline =
           'Many show possible disease signs. Focus on cleanliness, spacing, and stable conditions.';
@@ -611,7 +618,7 @@ class _ScanSectionState extends State<ScanSection> {
       ];
     } else {
       riskLabel = 'HIGH RISK';
-      pillBg = const Color(0xFFC62828); // strong red (similar to Reupload)
+      pillBg = const Color(0xFFC62828);
       pillFg = Colors.white;
       headline =
           'Many appear diseased. Prioritize isolation, sanitation, and a stable environment to reduce losses.';
@@ -644,26 +651,22 @@ class _ScanSectionState extends State<ScanSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          /// HEADER ROW
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Silkworm / Nature icon (low saturation)
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF447042),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF447042),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  Icons.grass_rounded, // closest clean silkworm/nature vibe
+                child: const Icon(
+                  Icons.grass_rounded,
                   size: 18,
                   color: Colors.white,
                 ),
               ),
               const SizedBox(width: 10),
-
-              // Title
               Expanded(
                 child: Text(
                   'TIPS & RECOMMENDATIONS',
@@ -675,15 +678,13 @@ class _ScanSectionState extends State<ScanSection> {
                   ),
                 ),
               ),
-
-              // Risk pill (NO ICON)
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: pillBg, // green-tuned outside
+                  color: pillBg,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
@@ -698,10 +699,7 @@ class _ScanSectionState extends State<ScanSection> {
               ),
             ],
           ),
-
           const SizedBox(height: 12),
-
-          /// HEADLINE (NO ICON)
           Text(
             headline,
             style: GoogleFonts.nunito(
@@ -711,25 +709,21 @@ class _ScanSectionState extends State<ScanSection> {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-
           const SizedBox(height: 14),
-
-          /// TIPS LIST
           ...tips.map(
             (t) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Soft green check
                   Container(
                     margin: const EdgeInsets.only(top: 2),
                     padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF63A361),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF63A361),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(
+                    child: const Icon(
                       Icons.check_rounded,
                       size: 14,
                       color: Colors.white,
