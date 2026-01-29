@@ -177,7 +177,7 @@ class _ScanSectionState extends State<ScanSection> {
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(
-                      strokeWidth: 2,
+                      strokeWidth: 2.5,
                       color: Colors.white,
                     ),
                   ),
@@ -273,7 +273,7 @@ class _ScanSectionState extends State<ScanSection> {
               x2: x2,
               y2: y2,
               color: color,
-              thickness: 3,
+              thickness: 2.5,
             );
           }
 
@@ -331,6 +331,180 @@ class _ScanSectionState extends State<ScanSection> {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _showScanPreview() {
+    if (_image == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.65),
+      builder: (_) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 18,
+            vertical: 24,
+          ),
+          backgroundColor: Colors.transparent,
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Preview Card
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.25),
+                        blurRadius: 22,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header + Legends
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '',
+                              style: GoogleFonts.nunito(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF253D24),
+                              ),
+                            ),
+                          ),
+                          _legendChip(
+                            color: const Color(0xFF66A060),
+                            label: 'Healthy',
+                          ),
+                          const SizedBox(width: 8),
+                          _legendChip(
+                            color: const Color(0xFFE84A4A),
+                            label: 'Diseased',
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Image + Boxes (square)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: AspectRatio(
+                          aspectRatio: 1,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.file(File(_image!.path), fit: BoxFit.cover),
+                              IgnorePointer(
+                                child: CustomPaint(
+                                  painter: YoloBoxPainter(
+                                    detections: _detections,
+                                    labels: const ['H', 'D'],
+                                  ),
+                                ),
+                              ),
+
+                              // Optional small overlay info
+                              Positioned(
+                                left: 10,
+                                top: 10,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.45),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    'H: ${healthyCount ?? 0}   D: ${diseasedCount ?? 0}',
+                                    style: GoogleFonts.nunito(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white,
+                                      shadows: const [
+                                        Shadow(
+                                          blurRadius: 2,
+                                          color: Colors.black54,
+                                          offset: Offset(0, 1),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                // Close button below preview
+                SizedBox(
+                  width: 160,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF63A361),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    child: Text(
+                      'Close',
+                      style: GoogleFonts.nunito(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _legendChip({required Color color, required String label}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: GoogleFonts.nunito(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w900,
+            color: color,
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -408,7 +582,10 @@ class _ScanSectionState extends State<ScanSection> {
                                 ],
                               ),
                             )
-                          : _buildPreviewWithBoxes(),
+                          : GestureDetector(
+                              onTap: _showScanPreview,
+                              child: _buildPreviewWithBoxes(),
+                            ),
                     ),
 
                     const SizedBox(height: 24),
@@ -923,7 +1100,8 @@ class YoloBoxPainter extends CustomPainter {
       final label = (d.classId >= 0 && d.classId < labels.length)
           ? labels[d.classId]
           : 'Class ${d.classId}';
-      final text = '$label ${(d.score * 100).toStringAsFixed(1)}%';
+
+      final text = label;
 
       textPainter.text = TextSpan(
         text: text,
@@ -931,7 +1109,6 @@ class YoloBoxPainter extends CustomPainter {
           color: paint.color,
           fontSize: 12,
           fontWeight: FontWeight.w700,
-          backgroundColor: const Color(0xAAFFFFFF),
         ),
       );
       textPainter.layout();
