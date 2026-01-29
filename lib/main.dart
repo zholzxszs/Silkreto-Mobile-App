@@ -60,8 +60,6 @@ class MyApp extends StatelessWidget {
         '/scan': (context) => const ScanSection(),
         '/upload': (context) => const UploadSection(),
         '/history': (context) => const HistorySection(),
-        // Add more screens when you create them
-        // '/manual': (context) => const ManualSection(),
       },
 
       // Good practice: handle unknown routes
