@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import '../database/database_helper.dart';
 import '../models/scan_result_model.dart';
 
@@ -12,10 +16,35 @@ class HomeSection extends StatefulWidget {
   State<HomeSection> createState() => _HomeSectionState();
 }
 
+class _WeatherSnapshot {
+  final String locationLabel;
+  final DateTime observedAt;
+  final double temperatureC;
+  final double apparentC;
+  final int humidityPct;
+  final double windKph;
+  final int weatherCode;
+
+  _WeatherSnapshot({
+    required this.locationLabel,
+    required this.observedAt,
+    required this.temperatureC,
+    required this.apparentC,
+    required this.humidityPct,
+    required this.windKph,
+    required this.weatherCode,
+  });
+}
+
 class _HomeSectionState extends State<HomeSection> {
   final ScrollController _scrollController = ScrollController();
   bool _navVisible = true;
   double _previousOffset = 0.0;
+
+  // Weather state (current location)
+  bool _weatherLoading = true;
+  String? _weatherError;
+  _WeatherSnapshot? _weather;
 
   List<int> _availableYears = [];
   int? _selectedYear;
@@ -41,6 +70,7 @@ class _HomeSectionState extends State<HomeSection> {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _scrollController.addListener(_onScroll);
+    _loadWeather();
     _loadAnalyticsData();
   }
 
@@ -72,6 +102,230 @@ class _HomeSectionState extends State<HomeSection> {
       }
       _processDataForYear(_selectedYear, results);
     });
+  }
+
+  // ---- Weather (API + current location) ----
+  Future<void> _loadWeather() async {
+    setState(() {
+      _weatherLoading = true;
+      _weatherError = null;
+    });
+
+    try {
+      final pos = await _getCurrentPosition();
+      final locationLabel = await _reverseGeocode(pos.latitude, pos.longitude);
+
+      final snapshot = await _fetchWeather(
+        pos.latitude,
+        pos.longitude,
+        locationLabel,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _weather = snapshot;
+        _weatherLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _weatherError = e.toString();
+        _weatherLoading = false;
+      });
+    }
+  }
+
+  Future<Position> _getCurrentPosition() async {
+    final enabled = await Geolocator.isLocationServiceEnabled();
+    if (!enabled) {
+      throw Exception('Location services are disabled.');
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied) {
+      throw Exception('Location permission denied.');
+    }
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception('Location permission permanently denied.');
+    }
+
+    return Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.low,
+      timeLimit: const Duration(seconds: 10),
+    );
+  }
+
+  Future<String> _reverseGeocode(double lat, double lon) async {
+    try {
+      final placemarks = await placemarkFromCoordinates(lat, lon);
+      if (placemarks.isEmpty) return 'Current location';
+      final p = placemarks.first;
+
+      // Keep it short and friendly (City, Province/State)
+      final parts = <String>[];
+      if ((p.locality ?? '').trim().isNotEmpty) parts.add(p.locality!.trim());
+      if ((p.administrativeArea ?? '').trim().isNotEmpty) {
+        parts.add(p.administrativeArea!.trim());
+      }
+      if (parts.isEmpty && (p.subAdministrativeArea ?? '').trim().isNotEmpty) {
+        parts.add(p.subAdministrativeArea!.trim());
+      }
+      return parts.isEmpty ? 'Current location' : parts.join(', ');
+    } catch (_) {
+      return 'Current location';
+    }
+  }
+
+  Future<_WeatherSnapshot> _fetchWeather(
+    double lat,
+    double lon,
+    String locationLabel,
+  ) async {
+    final uri = Uri.parse(
+      'https://api.open-meteo.com/v1/forecast'
+      '?latitude=$lat&longitude=$lon'
+      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code'
+      '&timezone=auto',
+    );
+
+    final res = await http.get(uri).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('Weather API error (${res.statusCode}).');
+    }
+
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final current = (json['current'] as Map<String, dynamic>?);
+    if (current == null) {
+      throw Exception('Weather data unavailable.');
+    }
+
+    final temp = (current['temperature_2m'] as num?)?.toDouble() ?? 0.0;
+    final apparent =
+        (current['apparent_temperature'] as num?)?.toDouble() ?? temp;
+    final humidity = (current['relative_humidity_2m'] as num?)?.toInt() ?? 0;
+    final wind = (current['wind_speed_10m'] as num?)?.toDouble() ?? 0.0;
+    final code = (current['weather_code'] as num?)?.toInt() ?? 0;
+
+    // time is ISO string
+    final timeStr =
+        (current['time'] as String?) ?? DateTime.now().toIso8601String();
+    final observedAt = DateTime.tryParse(timeStr) ?? DateTime.now();
+
+    return _WeatherSnapshot(
+      locationLabel: locationLabel,
+      observedAt: observedAt,
+      temperatureC: temp,
+      apparentC: apparent,
+      humidityPct: humidity,
+      windKph: wind,
+      weatherCode: code,
+    );
+  }
+
+  String _conditionLabel(int code) {
+    // Open-Meteo weather codes: https://open-meteo.com/en/docs
+    if (code == 0) return 'Clear';
+    if (code == 1 || code == 2) return 'Partly cloudy';
+    if (code == 3) return 'Cloudy';
+    if (code == 45 || code == 48) return 'Fog';
+    if (code == 51 || code == 53 || code == 55) return 'Drizzle';
+    if (code == 61 || code == 63 || code == 65) return 'Rain';
+    if (code == 66 || code == 67) return 'Freezing rain';
+    if (code == 71 || code == 73 || code == 75) return 'Snow';
+    if (code == 77) return 'Snow grains';
+    if (code == 80 || code == 81 || code == 82) return 'Rain showers';
+    if (code == 85 || code == 86) return 'Snow showers';
+    if (code == 95) return 'Thunderstorm';
+    if (code == 96 || code == 99) return 'Thunderstorm';
+    return 'Weather';
+  }
+
+  LinearGradient _getWeatherGradient(int weatherCode) {
+    // Clear
+    if (weatherCode == 0) {
+      return const LinearGradient(
+        begin: Alignment(0.50, -0.00),
+        end: Alignment(0.50, 1.00),
+        colors: [Color(0xFFFFD20F), Color(0xFFFDE7B3)],
+      );
+    }
+    // Partly cloudy
+    if (weatherCode == 1 || weatherCode == 2) {
+      return const LinearGradient(
+        begin: Alignment(0.50, -0.00),
+        end: Alignment(0.50, 1.00),
+        colors: [Color(0xFFB8D4E8), Color(0xFFE8F1F8)],
+      );
+    }
+    // Cloudy
+    if (weatherCode == 3) {
+      return const LinearGradient(
+        begin: Alignment(0.50, -0.00),
+        end: Alignment(0.50, 1.00),
+        colors: [Color(0xFF9BA8B8), Color(0xFFD4DFE8)],
+      );
+    }
+    // Fog
+    if (weatherCode == 45 || weatherCode == 48) {
+      return const LinearGradient(
+        begin: Alignment(0.50, -0.00),
+        end: Alignment(0.50, 1.00),
+        colors: [Color(0xFF8B9BA8), Color(0xFFC5D0DC)],
+      );
+    }
+    // Drizzle/Rain
+    if (weatherCode >= 51 && weatherCode <= 67) {
+      return const LinearGradient(
+        begin: Alignment(0.50, -0.00),
+        end: Alignment(0.50, 1.00),
+        colors: [Color(0xFF5B7A95), Color(0xFFA8C5DC)],
+      );
+    }
+    // Snow
+    if (weatherCode >= 71 && weatherCode <= 86) {
+      return const LinearGradient(
+        begin: Alignment(0.50, -0.00),
+        end: Alignment(0.50, 1.00),
+        colors: [Color(0xFFB8D4E8), Color(0xFFF0F5FF)],
+      );
+    }
+    // Thunderstorm
+    if (weatherCode >= 95) {
+      return const LinearGradient(
+        begin: Alignment(0.50, -0.00),
+        end: Alignment(0.50, 1.00),
+        colors: [Color(0xFF4A5F7A), Color(0xFF7A8FA0)],
+      );
+    }
+    // Default
+    return const LinearGradient(
+      begin: Alignment(0.50, -0.00),
+      end: Alignment(0.50, 1.00),
+      colors: [Color(0xFFFFD20F), Color(0xFFFDE7B3)],
+    );
+  }
+
+  String _briefDecisionSupport(_WeatherSnapshot w) {
+    final hot = w.temperatureC >= 30 || w.apparentC >= 31;
+    final humid = w.humidityPct >= 75;
+    final windy = w.windKph >= 20;
+
+    if (hot && humid) {
+      return 'High heat & humidity: High disease risk. Improve ventilation and reduce stocking density.';
+    }
+    if (hot) {
+      return 'High temperature: Risk of heat stress. Increase ventilation.';
+    }
+    if (humid) {
+      return 'High humidity: Risk of fungal disease. Reduce moisture buildup.';
+    }
+    if (windy) {
+      return 'Strong wind: Draft risk. Strengthen enclosure sealing, minimize direct airflow, and monitor temperature stability closely.';
+    }
+    return 'Optimal conditions: Maintain temperature, humidity, and cleanliness.';
   }
 
   void _processDataForYear(int? year, List<ScanResult> allResults) {
@@ -242,184 +496,312 @@ class _HomeSectionState extends State<HomeSection> {
   }
 
   Widget _buildWeatherCard(double width) {
+    final w = _weather;
+    final gradient = w != null
+        ? _getWeatherGradient(w.weatherCode)
+        : const LinearGradient(
+            begin: Alignment(0.50, -0.00),
+            end: Alignment(0.50, 1.00),
+            colors: [Color(0xFFFFD20F), Color(0xFFFDE7B3)],
+          );
+
     return Container(
       width: width - 42,
-      height: 130,
       margin: const EdgeInsets.symmetric(horizontal: 21),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment(0.50, -0.00),
-          end: Alignment(0.50, 1.00),
-          colors: [Color(0xFFFFD20F), Color(0xFFFDE7B3)],
-        ),
-        borderRadius: BorderRadius.circular(10),
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: const Color(0x3F000000),
-            blurRadius: 10,
-            offset: const Offset(4, 4),
+            color: const Color(0x26000000),
+            blurRadius: 12,
+            offset: const Offset(4, 6),
             spreadRadius: 0,
           ),
         ],
       ),
-      child: Stack(
-        children: [
-          // Weather Image (centered)
-          Positioned.fill(
-            child: Align(
-              alignment: const Alignment(0.35, 0),
-              child: SizedBox(
-                width: 167,
-                height: 150,
-                child: Image.asset(
-                  'assets/weather-clouds/sunny-cloudy.png',
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: Colors.grey[200],
-                    child: const Icon(
-                      Icons.cloud,
-                      size: 40,
-                      color: Colors.grey,
-                    ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: _weatherLoading
+            ? _buildWeatherSkeleton()
+            : (_weatherError != null && w == null)
+            ? _buildWeatherError()
+            : _buildWeatherContent(width, w!),
+      ),
+    );
+  }
+
+  Widget _buildWeatherSkeleton() {
+    Widget bar({double w = double.infinity, double h = 10}) {
+      return Container(
+        width: w,
+        height: h,
+        decoration: BoxDecoration(
+          color: const Color(0x66FFFFFF),
+          borderRadius: BorderRadius.circular(10),
+        ),
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              bar(w: 170, h: 18),
+              const SizedBox(height: 8),
+              bar(w: 120, h: 10),
+              const SizedBox(height: 16),
+              bar(w: 220, h: 10),
+              const SizedBox(height: 6),
+              bar(w: 200, h: 10),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            bar(w: 70, h: 34),
+            const SizedBox(height: 10),
+            bar(w: 80, h: 12),
+            const SizedBox(height: 6),
+            bar(w: 90, h: 10),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWeatherError() {
+    return Row(
+      children: [
+        const Icon(Icons.cloud_off, color: Color(0xFF5B532C)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'Weather unavailable. Turn on location and try again.',
+            style: GoogleFonts.sourceSansPro(
+              color: const Color(0xFF5B532C),
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ),
+        TextButton(
+          onPressed: _loadWeather,
+          style: TextButton.styleFrom(
+            foregroundColor: const Color(0xFF5B532C),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          ),
+          child: Text(
+            'Retry',
+            style: GoogleFonts.nunito(
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWeatherContent(double width, _WeatherSnapshot w) {
+    final day = DateFormat('EEEE').format(w.observedAt).toUpperCase();
+    final date = DateFormat('dd MMM, yyyy').format(w.observedAt);
+    final temp = '${w.temperatureC.round()}°C';
+    final feels = 'Feels like ${w.apparentC.round()}°C';
+    final cond = _conditionLabel(w.weatherCode);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Location chip
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: const Color(0xCCFDE7B3),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: const Color(0x335B532C), width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.location_on, size: 14, color: Color(0xFF2F2F2F)),
+              const SizedBox(width: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 190),
+                child: Text(
+                  w.locationLabel,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.sourceSansPro(
+                    color: const Color(0xFF2F2F2F),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
               ),
-            ),
+            ],
           ),
+        ),
 
-          // Location and Date
-          Positioned(
-            left: 14,
-            top: 11,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Location
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xCCFDE7B3),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.location_on,
-                        size: 12,
-                        color: Color(0xFF2F2F2F),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Sapilang, Bacnotan, La Union',
-                        style: GoogleFonts.sourceSansPro(
-                          color: const Color(0xFF2F2F2F),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 6),
+        const SizedBox(height: 12),
 
-                // Date
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: 'SUNDAY\n',
-                        style: GoogleFonts.nunito(
-                          color: const Color(0xFF5B532C),
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      TextSpan(
-                        text: '11 Nov, 2025',
-                        style: GoogleFonts.sourceSansPro(
-                          color: const Color(0xCC5B532C),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Temperature
-          Positioned(
-            right: 14,
-            top: 11, // top for 29°C
-            bottom: 14, // bottom for Sunny + Feels like
-            child: SizedBox(
-              height:
-                  130 - 25, // container height minus padding, adjust if needed
+        // Two-column layout: Left (Date, Humidity, Wind) | Right (Temperature)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Left Column: Date, Humidity, Wind
+            Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Top: Temperature
-                  Text(
-                    '29°C',
-                    textAlign: TextAlign.right,
-                    style: GoogleFonts.nunito(
-                      color: const Color(0xFF5B532C),
-                      fontSize: 32,
-                      fontWeight: FontWeight.w800,
-                      height: 1.37,
+                  // Date
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '$day\n',
+                          style: GoogleFonts.nunito(
+                            color: const Color(0xFF5B532C),
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,
+                          ),
+                        ),
+                        TextSpan(
+                          text: date,
+                          style: GoogleFonts.sourceSansPro(
+                            color: const Color(0xCC5B532C),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w400,
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-
-                  // Bottom: Sunny + Feels like
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisSize: MainAxisSize.min,
+                  const SizedBox(height: 18),
+                  // Humidity and Wind in same row
+                  Row(
                     children: [
-                      Text(
-                        'Sunny',
-                        style: GoogleFonts.nunito(
-                          color: const Color(0xFF5B532C),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                        ),
+                      _miniPill(
+                        icon: Icons.water_drop,
+                        label: '${w.humidityPct}% humidity',
+                        small: true,
                       ),
-                      const SizedBox(height: 1), // reduced spacing
-                      Text(
-                        'Feels like 31°C',
-                        style: GoogleFonts.sourceSansPro(
-                          color: const Color(0xCC5B532C),
-                          fontSize: 8,
-                          fontWeight: FontWeight.w300,
-                        ),
+                      const SizedBox(width: 8),
+                      _miniPill(
+                        icon: Icons.air,
+                        label: '${w.windKph.round()} km/h wind',
+                        small: true,
                       ),
                     ],
                   ),
                 ],
               ),
             ),
-          ),
+            const SizedBox(width: 14),
 
-          // Weather Warning
-          Positioned(
-            left: 14,
-            bottom: 11,
-            child: SizedBox(
-              width: (width - 42) * 0.4,
-              child: Text(
-                'Sunny weather may compromise the Silkworm, Diseased may occur.',
-                textAlign: TextAlign.justify,
-                style: GoogleFonts.sourceSansPro(
-                  color: const Color(0xFF5B532C),
-                  fontSize: 7,
-                  fontWeight: FontWeight.w400,
+            // Right Column: Temperature, Condition, Feels like
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  temp,
+                  style: GoogleFonts.nunito(
+                    color: const Color(0xFF5B532C),
+                    fontSize: 36,
+                    fontWeight: FontWeight.w900,
+                    height: 1.0,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 18),
+                // Grouped: Condition and Feels like
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      cond,
+                      style: GoogleFonts.nunito(
+                        color: const Color(0xFF5B532C),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 0),
+                    Text(
+                      feels,
+                      style: GoogleFonts.sourceSansPro(
+                        color: const Color(0xCC5B532C),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 14),
+
+        // Decision support with background
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0x25E8D4C4),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0x1A5B532C), width: 0.5),
+          ),
+          child: Text(
+            _briefDecisionSupport(w),
+            textAlign: TextAlign.justify,
+            style: GoogleFonts.sourceSansPro(
+              color: const Color(0xFF5B532C),
+              fontSize: 10.5,
+              fontWeight: FontWeight.w400,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _miniPill({
+    required IconData icon,
+    required String label,
+    bool small = false,
+  }) {
+    final fontSize = small ? 9.0 : 10.5;
+    final padding = small
+        ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
+        : const EdgeInsets.symmetric(horizontal: 10, vertical: 6);
+    final iconSize = small ? 12.0 : 14.0;
+
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: const Color(0x66FFFFFF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0x225B532C)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: iconSize, color: const Color(0xFF5B532C)),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: GoogleFonts.sourceSansPro(
+              color: const Color(0xFF5B532C),
+              fontSize: fontSize,
+              fontWeight: FontWeight.w400,
             ),
           ),
         ],
