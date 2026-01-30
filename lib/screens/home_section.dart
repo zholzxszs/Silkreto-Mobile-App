@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:app_settings/app_settings.dart';
 import '../database/database_helper.dart';
 import '../models/scan_result_model.dart';
 
@@ -70,8 +72,168 @@ class _HomeSectionState extends State<HomeSection> {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPermissionsAndLoadData();
+    });
+  }
+
+  Future<void> _checkPermissionsAndLoadData() async {
+    // Check all permissions first
+    final cameraStatus = await Permission.camera.status;
+    final locationStatus = await Permission.location.status;
+    final storageStatus = await Permission.storage.status;
+    final photosStatus = await Permission.photos.status;
+
+    // If any permission is not granted, show dialog
+    if (cameraStatus.isDenied ||
+        locationStatus.isDenied ||
+        storageStatus.isDenied ||
+        photosStatus.isDenied) {
+      await _showPermissionsDialog();
+    }
+
+    // Request all permissions
+    await Permission.camera.request();
+    await Permission.location.request();
+    await Permission.storage.request();
+    await Permission.photos.request();
+
     _loadWeather();
     _loadAnalyticsData();
+  }
+
+  Future<void> _showPermissionsDialog() async {
+    if (!mounted) return;
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+          title: Text(
+            'Permissions Required',
+            style: GoogleFonts.nunito(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF5B532C),
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SILKRETO needs the following permissions to function properly:',
+                  style: GoogleFonts.sourceSansPro(
+                    fontSize: 14,
+                    color: const Color(0xFF5B532C),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _buildPermissionItem(
+                  Icons.camera_alt,
+                  'Camera',
+                  'To scan silkworm images for disease detection',
+                ),
+                const SizedBox(height: 12),
+                _buildPermissionItem(
+                  Icons.location_on,
+                  'Location',
+                  'To show local weather conditions for rearing guidance',
+                ),
+                const SizedBox(height: 12),
+                _buildPermissionItem(
+                  Icons.folder,
+                  'Storage',
+                  'To save scan results and access uploaded images',
+                ),
+                const SizedBox(height: 12),
+                _buildPermissionItem(
+                  Icons.photo_library,
+                  'Photos',
+                  'To access and upload images from your gallery',
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                // Open app settings if permissions are permanently denied
+                final cameraStatus = await Permission.camera.status;
+                final locationStatus = await Permission.location.status;
+                final storageStatus = await Permission.storage.status;
+                final photosStatus = await Permission.photos.status;
+
+                if (cameraStatus.isPermanentlyDenied ||
+                    locationStatus.isPermanentlyDenied ||
+                    storageStatus.isPermanentlyDenied ||
+                    photosStatus.isPermanentlyDenied) {
+                  await AppSettings.openAppSettings();
+                }
+              },
+              child: Text(
+                'Open Settings',
+                style: GoogleFonts.nunito(
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF63A361),
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text(
+                'OK',
+                style: GoogleFonts.nunito(
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF63A361),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildPermissionItem(IconData icon, String title, String description) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 24, color: const Color(0xFF63A361)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: GoogleFonts.nunito(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF5B532C),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: GoogleFonts.sourceSansPro(
+                  fontSize: 12,
+                  color: const Color(0xCC5B532C),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _loadAnalyticsData() async {

@@ -28,6 +28,7 @@ dependencies:
   geocoding: ^4.0.0
   camera: ^0.11.3
   pathfinding: ^3.0.1
+  app_settings: ^5.1.1
 
 dev_dependencies:
   flutter_test:
@@ -54,6 +55,7 @@ flutter:
     - assets/model/best_float32.tflite
     - assets/silkreto-logo-square.jpg
     - assets/silkreto-logo-png.png
+    - assets/silkreto-logo-bg.jpg
 
 flutter_launcher_icons:
   android: true
