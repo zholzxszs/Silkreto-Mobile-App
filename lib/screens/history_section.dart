@@ -481,18 +481,15 @@ class _HistorySectionState extends State<HistorySection> {
     return Container(
       height: 80,
       margin: const EdgeInsets.only(bottom: 15),
-      decoration: ShapeDecoration(
-        gradient: LinearGradient(
-          begin: Alignment(0.50, 1.00),
-          end: Alignment(0.50, -0.00),
-          colors: [const Color(0xFF253D24), const Color(0xFF63A361)],
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        shadows: [
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
             offset: const Offset(0, 4),
+            spreadRadius: 0,
           ),
         ],
       ),
@@ -531,7 +528,7 @@ class _HistorySectionState extends State<HistorySection> {
                     Text(
                       '${scanResult.scanDate} at ${scanResult.scanTime}',
                       style: GoogleFonts.nunito(
-                        color: Colors.white,
+                        color: const Color(0xFF5B532C),
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
                       ),
