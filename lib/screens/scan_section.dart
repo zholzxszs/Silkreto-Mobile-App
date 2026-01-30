@@ -391,9 +391,9 @@ class _ScanSectionState extends State<ScanSection> {
                         children: [
                           Expanded(
                             child: Text(
-                              '',
+                              'Preview',
                               style: GoogleFonts.nunito(
-                                fontSize: 16,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w900,
                                 color: const Color(0xFF253D24),
                               ),
@@ -413,7 +413,7 @@ class _ScanSectionState extends State<ScanSection> {
 
                       const SizedBox(height: 12),
 
-                      // Image + Boxes (square)
+                      // Image + Boxes (square) - NO LABELS
                       ClipRRect(
                         borderRadius: BorderRadius.circular(14),
                         child: AspectRatio(
@@ -424,14 +424,13 @@ class _ScanSectionState extends State<ScanSection> {
                               Image.file(File(_image!.path), fit: BoxFit.cover),
                               IgnorePointer(
                                 child: CustomPaint(
-                                  painter: YoloBoxPainter(
+                                  painter: YoloBoxPainterPreview(
                                     detections: _detections,
-                                    labels: const ['H', 'D'],
                                   ),
                                 ),
                               ),
 
-                              // Optional small overlay info
+                              // Count overlay
                               Positioned(
                                 left: 10,
                                 top: 10,
@@ -1140,6 +1139,85 @@ class YoloBoxPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant YoloBoxPainter oldDelegate) {
+    return oldDelegate.detections != detections;
+  }
+}
+
+// Preview painter - shows boxes WITH labels
+class YoloBoxPainterPreview extends CustomPainter {
+  final List<Detection> detections;
+
+  YoloBoxPainterPreview({required this.detections});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (detections.isEmpty) return;
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+
+    final textPainter = TextPainter(textDirection: ui.TextDirection.ltr);
+
+    final bool isNormalized = detections.every(
+      (d) =>
+          d.x1.abs() <= 1.5 &&
+          d.y1.abs() <= 1.5 &&
+          d.x2.abs() <= 1.5 &&
+          d.y2.abs() <= 1.5,
+    );
+
+    for (final d in detections) {
+      paint.color = (d.classId == 0)
+          ? const Color(0xFF66A060)
+          : const Color(0xFFE84A4A);
+
+      double x1 = d.x1, y1 = d.y1, x2 = d.x2, y2 = d.y2;
+
+      if (isNormalized) {
+        x1 *= size.width;
+        x2 *= size.width;
+        y1 *= size.height;
+        y2 *= size.height;
+      } else {
+        x1 = x1 / 640.0 * size.width;
+        x2 = x2 / 640.0 * size.width;
+        y1 = y1 / 640.0 * size.height;
+        y2 = y2 / 640.0 * size.height;
+      }
+
+      final rect = Rect.fromLTRB(
+        x1.clamp(0.0, size.width),
+        y1.clamp(0.0, size.height),
+        x2.clamp(0.0, size.width),
+        y2.clamp(0.0, size.height),
+      );
+
+      canvas.drawRect(rect, paint);
+
+      // Draw labels (H or D)
+      final label = d.classId == 0 ? 'H' : 'D';
+
+      textPainter.text = TextSpan(
+        text: label,
+        style: TextStyle(
+          color: paint.color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+      textPainter.layout();
+
+      final textOffset = Offset(
+        rect.left,
+        max(0, rect.top - textPainter.height),
+      );
+      textPainter.paint(canvas, textOffset);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant YoloBoxPainterPreview oldDelegate) {
     return oldDelegate.detections != detections;
   }
 }
