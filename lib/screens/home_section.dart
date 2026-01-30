@@ -22,17 +22,34 @@ class HomeSection extends StatefulWidget {
 
 Color _locationChipBg(int weatherCode) {
   // Soft translucent versions of your weather themes
-  if (weatherCode == 0) return const Color(0x33FFD20F); // clear (yellow tint)
-  if (weatherCode == 1 || weatherCode == 2)
+  if (weatherCode == 0) {
+    return const Color(0x33FFD20F); // clear (yellow tint)
+  }
+
+  if (weatherCode == 1 || weatherCode == 2) {
     return const Color(0x33B8D4E8); // partly cloudy
-  if (weatherCode == 3) return const Color(0x339BA8B8); // cloudy
-  if (weatherCode == 45 || weatherCode == 48)
+  }
+
+  if (weatherCode == 3) {
+    return const Color(0x339BA8B8); // cloudy
+  }
+
+  if (weatherCode == 45 || weatherCode == 48) {
     return const Color(0x338B9BA8); // fog
-  if (weatherCode >= 51 && weatherCode <= 67)
+  }
+
+  if (weatherCode >= 51 && weatherCode <= 67) {
     return const Color(0x335B7A95); // rain
-  if (weatherCode >= 71 && weatherCode <= 86)
+  }
+
+  if (weatherCode >= 71 && weatherCode <= 86) {
     return const Color(0x33B8D4E8); // snow
-  if (weatherCode >= 95) return const Color(0x334A5F7A); // thunderstorm
+  }
+
+  if (weatherCode >= 95) {
+    return const Color(0x334A5F7A); // thunderstorm
+  }
+
   return const Color(0x33FFD20F);
 }
 
@@ -832,14 +849,6 @@ class _HomeSectionState extends State<HomeSection> {
                   _buildWeatherCard(screenSize.width),
                   const SizedBox(height: 30),
 
-                  // Explore Section
-                  _buildSectionTitle('Explore'),
-                  const SizedBox(height: 12),
-
-                  // Explore Cards Grid
-                  _buildExploreGrid(screenSize.width),
-                  const SizedBox(height: 40),
-
                   // Analytics Section
                   _buildSectionTitle('Analytics'),
                   const SizedBox(height: 12),
@@ -1246,99 +1255,6 @@ class _HomeSectionState extends State<HomeSection> {
     );
   }
 
-  Widget _buildExploreGrid(double width) {
-    final cardWidth = (width - 63) / 4;
-    final exploreItems = [
-      {
-        'icon': 'assets/Explore/Diseases.png',
-        'label': 'Diseases',
-        'w': 20.0,
-        'h': 21.0,
-      },
-      {
-        'icon': 'assets/Explore/Symptoms.png',
-        'label': 'Symptoms',
-        'w': 23.0,
-        'h': 21.0,
-      },
-      {
-        'icon': 'assets/Explore/Prevention.png',
-        'label': 'Prevention',
-        'w': 17.0,
-        'h': 21.0,
-      },
-      {
-        'icon': 'assets/Explore/Rearing.png',
-        'label': 'Rearing',
-        'w': 21.0,
-        'h': 21.0,
-      },
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 21),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: exploreItems.map<Widget>((item) {
-          return SizedBox(
-            width: cardWidth,
-            child: Column(
-              children: [
-                // Card with icon and label inside
-                Container(
-                  width: cardWidth,
-                  height: cardWidth,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0x3F000000),
-                        blurRadius: 10,
-                        offset: const Offset(4, 4),
-                        spreadRadius: 0,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: item['w'] as double,
-                        height: item['h'] as double,
-                        child: Image.asset(
-                          item['icon'] as String,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Icon(
-                              Icons.image_not_supported,
-                              size: 20,
-                              color: const Color(0xFF5B532C),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        item['label'] as String,
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.sourceSansPro(
-                          color: const Color(0xFF5B532C),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
   Widget _buildYearDropdown(double width) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 21),
@@ -1525,8 +1441,17 @@ class _HomeSectionState extends State<HomeSection> {
 
   Widget _buildAllMonthsSection(double width) {
     final cardWidth = width - 42;
+
     final sortedMonths = _monthlyAnalytics.keys.toList()
       ..sort((a, b) => _months.indexOf(b).compareTo(_months.indexOf(a)));
+
+    // ✅ keep only months that have non-zero data
+    final monthsWithData = sortedMonths.where((monthName) {
+      final data = _monthlyAnalytics[monthName];
+      if (data == null) return false;
+      final total = (data['healthy'] ?? 0) + (data['diseased'] ?? 0);
+      return total > 0;
+    }).toList();
 
     return Container(
       width: width,
@@ -1545,7 +1470,8 @@ class _HomeSectionState extends State<HomeSection> {
           const SizedBox(height: 16),
           _buildLegendRow(),
           const SizedBox(height: 8),
-          if (sortedMonths.isEmpty)
+
+          if (monthsWithData.isEmpty)
             const Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 32.0),
@@ -1554,30 +1480,29 @@ class _HomeSectionState extends State<HomeSection> {
             )
           else
             Column(
-              children: sortedMonths.map<Widget>((monthName) {
+              children: monthsWithData.map<Widget>((monthName) {
                 final data = _monthlyAnalytics[monthName]!;
-                final total = data['healthy']! + data['diseased']!;
+                final total = (data['healthy'] ?? 0) + (data['diseased'] ?? 0);
+
                 final healthyPercent = total > 0
-                    ? (data['healthy']! * 100 / total).round()
-                    : 0;
-                final diseasedPercent = total > 0
-                    ? (data['diseased']! * 100 / total).round()
+                    ? (((data['healthy'] ?? 0) * 100) / total).round()
                     : 0;
 
-                return Column(
-                  children: [
-                    _buildMonthCard(
-                      monthName,
-                      healthyPercent,
-                      diseasedPercent,
-                      cardWidth,
-                    ),
-                    const SizedBox(height: 12),
-                  ],
+                final diseasedPercent = total > 0
+                    ? (((data['diseased'] ?? 0) * 100) / total).round()
+                    : 0;
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _buildMonthCard(
+                    monthName,
+                    healthyPercent,
+                    diseasedPercent,
+                    cardWidth,
+                  ),
                 );
               }).toList(),
             ),
-          const SizedBox(height: 80),
         ],
       ),
     );
