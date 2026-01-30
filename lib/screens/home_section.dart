@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../database/database_helper.dart';
 import '../models/scan_result_model.dart';
 
@@ -78,18 +79,25 @@ class _HomeSectionState extends State<HomeSection> {
   }
 
   Future<void> _checkPermissionsAndLoadData() async {
+    // Check if permissions dialog has been shown before
+    final prefs = await SharedPreferences.getInstance();
+    final hasShownDialog = prefs.getBool('permissions_dialog_shown') ?? false;
+
     // Check all permissions first
     final cameraStatus = await Permission.camera.status;
     final locationStatus = await Permission.location.status;
     final storageStatus = await Permission.storage.status;
     final photosStatus = await Permission.photos.status;
 
-    // If any permission is not granted, show dialog
-    if (cameraStatus.isDenied ||
-        locationStatus.isDenied ||
-        storageStatus.isDenied ||
-        photosStatus.isDenied) {
+    // Only show dialog once if permissions are denied and dialog hasn't been shown
+    if (!hasShownDialog &&
+        (cameraStatus.isDenied ||
+            locationStatus.isDenied ||
+            storageStatus.isDenied ||
+            photosStatus.isDenied)) {
       await _showPermissionsDialog();
+      // Mark dialog as shown
+      await prefs.setBool('permissions_dialog_shown', true);
     }
 
     // Request all permissions
