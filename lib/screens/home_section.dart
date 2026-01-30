@@ -11,12 +11,231 @@ import 'package:app_settings/app_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../database/database_helper.dart';
 import '../models/scan_result_model.dart';
+import 'dart:ui' as ui;
 
 class HomeSection extends StatefulWidget {
   const HomeSection({super.key});
 
   @override
   State<HomeSection> createState() => _HomeSectionState();
+}
+
+class _MonthBars {
+  final int monthIndex;
+  final String monthLabel;
+  final int healthy;
+  final int diseased;
+
+  _MonthBars({
+    required this.monthIndex,
+    required this.monthLabel,
+    required this.healthy,
+    required this.diseased,
+  });
+}
+
+Widget _miniLegendDot({required Color color, required String label}) {
+  return Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ),
+      const SizedBox(width: 6),
+      Text(
+        label,
+        style: GoogleFonts.nunito(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: Colors.black.withOpacity(0.65),
+        ),
+      ),
+    ],
+  );
+}
+
+class _GroupedBarChartPainter extends CustomPainter {
+  final List<_MonthBars> points;
+  final int maxValue;
+  final double t; // animation 0..1
+
+  _GroupedBarChartPainter({
+    required this.points,
+    required this.maxValue,
+    required this.t,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+
+    // Layout
+    final paddingTop = 6.0;
+    final paddingBottom = 8.0;
+    final paddingH = 4.0;
+
+    final chartHeight = size.height - paddingTop - paddingBottom;
+    final chartWidth = size.width - paddingH * 2;
+
+    final origin = Offset(paddingH, paddingTop);
+
+    // Subtle grid lines
+    final gridPaint = Paint()
+      ..color = const Color(0xFFEFEFEF)
+      ..strokeWidth = 1;
+
+    for (int i = 1; i <= 3; i++) {
+      final y = origin.dy + chartHeight * (i / 4);
+      canvas.drawLine(
+        Offset(origin.dx, y),
+        Offset(origin.dx + chartWidth, y),
+        gridPaint,
+      );
+    }
+
+    // Bars
+    final groupW = chartWidth / points.length;
+    final barW = (groupW * 0.22).clamp(6.0, 14.0); // responsive
+    final gap = (groupW * 0.10).clamp(3.0, 10.0);
+
+    final healthyPaint = Paint()..color = const Color(0xFF66A060);
+    final diseasedPaint = Paint()..color = const Color(0xFFE84A4A);
+
+    // Text painters (reused)
+    final tp = TextPainter(
+      textAlign: TextAlign.center,
+      textDirection: ui.TextDirection.ltr,
+    );
+
+    TextStyle labelInside(Color color) => TextStyle(
+      color: Colors.white,
+      fontSize: 10,
+      fontWeight: FontWeight.w800,
+      shadows: const [
+        Shadow(blurRadius: 2, color: Colors.black26, offset: Offset(0, 1)),
+      ],
+    );
+
+    TextStyle labelAbove(Color color) =>
+        TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w900);
+
+    for (int i = 0; i < points.length; i++) {
+      final p = points[i];
+
+      final baseX = origin.dx + groupW * i + (groupW / 2);
+      final healthyX = baseX - gap / 2 - barW;
+      final diseasedX = baseX + gap / 2;
+
+      final hVal = p.healthy.toDouble();
+      final dVal = p.diseased.toDouble();
+
+      final hH = (hVal / maxValue) * chartHeight * t;
+      final dH = (dVal / maxValue) * chartHeight * t;
+
+      final r = Radius.circular(barW); // rounded top
+
+      final hRect = RRect.fromRectAndCorners(
+        Rect.fromLTWH(healthyX, origin.dy + chartHeight - hH, barW, hH),
+        topLeft: r,
+        topRight: r,
+      );
+
+      final dRect = RRect.fromRectAndCorners(
+        Rect.fromLTWH(diseasedX, origin.dy + chartHeight - dH, barW, dH),
+        topLeft: r,
+        topRight: r,
+      );
+
+      // draw bars
+      canvas.drawRRect(hRect, healthyPaint);
+      canvas.drawRRect(dRect, diseasedPaint);
+
+      // draw labels ONLY when animation is far enough so it doesn't jitter
+      final showLabels = t > 0.75;
+
+      if (showLabels) {
+        // Healthy label
+        _drawValueOnBar(
+          canvas: canvas,
+          tp: tp,
+          value: p.healthy,
+          barX: healthyX,
+          barW: barW,
+          barTopY: origin.dy + chartHeight - hH,
+          barHeight: hH,
+          insideStyle: labelInside(const Color(0xFF66A060)),
+          aboveStyle: labelAbove(const Color(0xFF66A060)),
+        );
+
+        // Diseased label
+        _drawValueOnBar(
+          canvas: canvas,
+          tp: tp,
+          value: p.diseased,
+          barX: diseasedX,
+          barW: barW,
+          barTopY: origin.dy + chartHeight - dH,
+          barHeight: dH,
+          insideStyle: labelInside(const Color(0xFFE84A4A)),
+          aboveStyle: labelAbove(const Color(0xFFE84A4A)),
+        );
+      }
+    }
+  }
+
+  void _drawValueOnBar({
+    required Canvas canvas,
+    required TextPainter tp,
+    required int value,
+    required double barX,
+    required double barW,
+    required double barTopY,
+    required double barHeight,
+    required TextStyle insideStyle,
+    required TextStyle aboveStyle,
+  }) {
+    if (value <= 0) return; // don't show 0 labels
+
+    final text = value.toString();
+
+    // Decide whether to put label inside or above based on height
+    // If bar is tall enough: inside near top; else above the bar
+    const insidePadding = 4.0;
+    const abovePadding = 3.0;
+
+    // measure text
+    tp.text = TextSpan(text: text, style: insideStyle);
+    tp.layout(minWidth: 0, maxWidth: barW + 20);
+
+    final canFitInside = barHeight >= (tp.height + 10);
+
+    if (canFitInside) {
+      // inside (white) near top area
+      final dx = barX + (barW - tp.width) / 2;
+      final dy = barTopY + insidePadding; // slightly below rounded top
+      tp.paint(canvas, Offset(dx, dy));
+    } else {
+      // above (colored)
+      tp.text = TextSpan(text: text, style: aboveStyle);
+      tp.layout(minWidth: 0, maxWidth: barW + 20);
+
+      final dx = barX + (barW - tp.width) / 2;
+      final dy = (barTopY - tp.height - abovePadding).clamp(
+        0.0,
+        double.infinity,
+      );
+      tp.paint(canvas, Offset(dx, dy));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GroupedBarChartPainter oldDelegate) {
+    return oldDelegate.points != points ||
+        oldDelegate.maxValue != maxValue ||
+        oldDelegate.t != t;
+  }
 }
 
 class _WeatherSnapshot {
@@ -54,18 +273,18 @@ class _HomeSectionState extends State<HomeSection> {
   Map<String, Map<String, int>> _monthlyAnalytics = {};
 
   final List<String> _months = [
-    'January',
-    'February',
-    'March',
-    'April',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
     'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   @override
@@ -600,7 +819,7 @@ class _HomeSectionState extends State<HomeSection> {
                   const SizedBox(height: 12),
 
                   // Line Graph Card
-                  _buildLineGraphCard(screenSize.width),
+                  _buildBarGraphCard(screenSize.width),
                   const SizedBox(height: 40),
 
                   // All Months Section - Updated
@@ -1125,33 +1344,147 @@ class _HomeSectionState extends State<HomeSection> {
     );
   }
 
-  Widget _buildLineGraphCard(double width) {
+  Widget _buildBarGraphCard(double width) {
+    // only months with data
+    final monthsWithData =
+        _monthlyAnalytics.entries.where((e) {
+          final healthy = e.value['healthy'] ?? 0;
+          final diseased = e.value['diseased'] ?? 0;
+          return (healthy + diseased) > 0;
+        }).toList()..sort(
+          (a, b) => _months.indexOf(a.key).compareTo(_months.indexOf(b.key)),
+        );
+
+    if (monthsWithData.isEmpty) {
+      return Container(
+        width: width - 42,
+        height: 190,
+        margin: const EdgeInsets.symmetric(horizontal: 21),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFEAEAEA)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            'No analytics data yet.',
+            style: GoogleFonts.sourceSansPro(
+              fontSize: 13,
+              color: Colors.black.withOpacity(0.55),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Build chart points
+    final points = monthsWithData.map((e) {
+      final mIndex = _months.indexOf(e.key); // 0..11
+      final healthy = e.value['healthy'] ?? 0;
+      final diseased = e.value['diseased'] ?? 0;
+      final short = e.key.substring(0, 3); // Jan, Feb...
+      return _MonthBars(
+        monthIndex: mIndex,
+        monthLabel: short,
+        healthy: healthy,
+        diseased: diseased,
+      );
+    }).toList();
+
+    final maxValue = points
+        .map((p) => (p.healthy > p.diseased ? p.healthy : p.diseased))
+        .fold<int>(0, (prev, v) => v > prev ? v : prev);
+
     return Container(
       width: width - 42,
-      height: 163,
+      height: 220,
       margin: const EdgeInsets.symmetric(horizontal: 21),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFEAEAEA)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0x3F000000),
-            blurRadius: 10,
-            offset: const Offset(4, 4),
-            spreadRadius: 0,
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      child: Center(
-        child: Text(
-          'Line Graph',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.sourceSansPro(
-            color: Colors.black,
-            fontSize: 8,
-            fontWeight: FontWeight.w600,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(
+            children: [
+              Text(
+                'Monthly Counts',
+                style: GoogleFonts.nunito(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: const Color(0xFF253D24),
+                ),
+              ),
+              const Spacer(),
+              _miniLegendDot(color: const Color(0xFF66A060), label: 'Healthy'),
+              const SizedBox(width: 10),
+              _miniLegendDot(color: const Color(0xFFE84A4A), label: 'Diseased'),
+            ],
           ),
-        ),
+          const SizedBox(height: 12),
+
+          // Chart (animated)
+          Expanded(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 700),
+              curve: Curves.easeOutCubic,
+              builder: (context, t, _) {
+                return CustomPaint(
+                  painter: _GroupedBarChartPainter(
+                    points: points,
+                    maxValue: maxValue <= 0 ? 1 : maxValue,
+                    t: t,
+                  ),
+                  child: Container(),
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // X labels row
+          SizedBox(
+            height: 18,
+            child: Row(
+              children: points.map((p) {
+                return Expanded(
+                  child: Center(
+                    child: Text(
+                      p.monthLabel,
+                      style: GoogleFonts.sourceSansPro(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black.withOpacity(0.55),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ),
     );
   }
