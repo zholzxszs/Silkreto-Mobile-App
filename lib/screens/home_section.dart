@@ -588,10 +588,13 @@ class _HomeSectionState extends State<HomeSection> {
       throw Exception('Location permission permanently denied.');
     }
 
-    return Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.low,
-      timeLimit: const Duration(seconds: 10),
+    final settings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 0,
+      timeLimit: const Duration(seconds: 15),
     );
+
+    return Geolocator.getCurrentPosition(locationSettings: settings);
   }
 
   Future<String> _reverseGeocode(double lat, double lon) async {
@@ -624,7 +627,8 @@ class _HomeSectionState extends State<HomeSection> {
       'https://api.open-meteo.com/v1/forecast'
       '?latitude=$lat&longitude=$lon'
       '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code'
-      '&timezone=auto',
+      '&timezone=auto'
+      '&cell_selection=nearest',
     );
 
     final res = await http.get(uri).timeout(const Duration(seconds: 10));
