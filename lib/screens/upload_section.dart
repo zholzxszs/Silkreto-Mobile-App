@@ -291,6 +291,23 @@ class _UploadSectionState extends State<UploadSection> {
               color: color,
               thickness: 3,
             );
+
+            final label = d.classId == 0 ? 'H' : 'D';
+
+            // label positioning
+            const int padX = 6;
+            const int padY = 2;
+            final int labelX = x1;
+            final int labelY = max(0, y1 - 18);
+
+            img.drawString(
+              canvas,
+              label,
+              font: img.arial14,
+              x: labelX + padX,
+              y: labelY + padY,
+              color: color,
+            );
           }
 
           final annotatedFileName =

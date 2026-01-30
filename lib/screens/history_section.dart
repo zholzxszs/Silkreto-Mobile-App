@@ -143,10 +143,12 @@ class _HistorySectionState extends State<HistorySection> {
   }
 
   // ✅ ScanSection-style preview modal (with legends + counts + labels + same Close button)
+  // Uses annotated image directly (no inference needed - smooth and fast!)
   void _showImagePreviewFromHistory(
     BuildContext context,
     ScanResult scanResult,
   ) {
+    // Use annotated image (already has boxes and labels drawn) or fallback to raw
     final previewPath =
         scanResult.annotatedImagePath ?? scanResult.rawImagePath;
 
@@ -210,7 +212,7 @@ class _HistorySectionState extends State<HistorySection> {
 
                       const SizedBox(height: 12),
 
-                      // Image (square)
+                      // Image (square) - annotated image already has boxes and labels
                       ClipRRect(
                         borderRadius: BorderRadius.circular(14),
                         child: AspectRatio(
@@ -750,10 +752,6 @@ class YoloBoxPainter extends CustomPainter {
           color: paint.color,
           fontSize: 12,
           fontWeight: FontWeight.w700,
-          // ✅ no grayish background
-          shadows: const [
-            Shadow(blurRadius: 3, color: Colors.black54, offset: Offset(0, 1)),
-          ],
         ),
       );
       textPainter.layout();
