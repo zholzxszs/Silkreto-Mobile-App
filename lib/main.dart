@@ -5,6 +5,7 @@ import 'screens/home_screen.dart';
 import 'screens/scan_section.dart';
 import 'screens/upload_section.dart';
 import 'screens/history_section.dart';
+import 'screens/manual_section.dart';
 
 void main() {
   // Optional: lock orientation early (many apps do this)
@@ -58,6 +59,7 @@ class MyApp extends StatelessWidget {
         '/scan': (context) => const ScanSection(),
         '/upload': (context) => const UploadSection(),
         '/history': (context) => const HistorySection(),
+        '/manual': (context) => const ManualSection(),
       },
 
       // Good practice: handle unknown routes
