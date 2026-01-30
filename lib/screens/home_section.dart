@@ -20,6 +20,36 @@ class HomeSection extends StatefulWidget {
   State<HomeSection> createState() => _HomeSectionState();
 }
 
+Color _locationChipBg(int weatherCode) {
+  // Soft translucent versions of your weather themes
+  if (weatherCode == 0) return const Color(0x33FFD20F); // clear (yellow tint)
+  if (weatherCode == 1 || weatherCode == 2)
+    return const Color(0x33B8D4E8); // partly cloudy
+  if (weatherCode == 3) return const Color(0x339BA8B8); // cloudy
+  if (weatherCode == 45 || weatherCode == 48)
+    return const Color(0x338B9BA8); // fog
+  if (weatherCode >= 51 && weatherCode <= 67)
+    return const Color(0x335B7A95); // rain
+  if (weatherCode >= 71 && weatherCode <= 86)
+    return const Color(0x33B8D4E8); // snow
+  if (weatherCode >= 95) return const Color(0x334A5F7A); // thunderstorm
+  return const Color(0x33FFD20F);
+}
+
+Color _locationChipBorder(int weatherCode) {
+  if (weatherCode >= 51 && weatherCode <= 67) return const Color(0x335B7A95);
+  if (weatherCode >= 95) return const Color(0x334A5F7A);
+  return const Color(0x335B532C);
+}
+
+Color _locationChipTextColor(int weatherCode) {
+  // darker text on bright skies, white text on dark storms/rain
+  if ((weatherCode >= 51 && weatherCode <= 67) || weatherCode >= 95) {
+    return Colors.white.withOpacity(0.95);
+  }
+  return const Color(0xFF2F2F2F);
+}
+
 class _MonthBars {
   final int monthIndex;
   final String monthLabel;
@@ -1003,22 +1033,26 @@ class _HomeSectionState extends State<HomeSection> {
     final temp = '${w.temperatureC.round()}°C';
     final feels = 'Feels like ${w.apparentC.round()}°C';
     final cond = _conditionLabel(w.weatherCode);
+    final chipBg = _locationChipBg(w.weatherCode);
+    final chipBorder = _locationChipBorder(w.weatherCode);
+    final chipText = _locationChipTextColor(w.weatherCode);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Location chip
+        // Location chip (DYNAMIC
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: const Color(0xCCFDE7B3),
+            color: chipBg,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: const Color(0x335B532C), width: 1),
+            border: Border.all(color: chipBorder, width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.location_on, size: 14, color: Color(0xFF2F2F2F)),
+              Icon(Icons.location_on, size: 14, color: chipText),
               const SizedBox(width: 6),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 190),
@@ -1026,9 +1060,9 @@ class _HomeSectionState extends State<HomeSection> {
                   w.locationLabel,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.sourceSansPro(
-                    color: const Color(0xFF2F2F2F),
+                    color: chipText,
                     fontSize: 11,
-                    fontWeight: FontWeight.w400,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
