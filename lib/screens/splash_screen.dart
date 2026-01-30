@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:silkreto/screens/get_started_screen.dart';
 import 'package:silkreto/screens/home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -18,7 +16,7 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     _startAnimation();
-    _checkOnboardingAndNavigate();
+    _navigateToHome();
   }
 
   void _startAnimation() {
@@ -29,28 +27,16 @@ class _SplashScreenState extends State<SplashScreen> {
     });
   }
 
-  Future<void> _checkOnboardingAndNavigate() async {
+  Future<void> _navigateToHome() async {
     // Give time for logo fade-in + pleasant short wait
     await Future.delayed(const Duration(seconds: 3));
-
-    if (!mounted) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    final hasSeenOnboarding = prefs.getBool('hasSeenOnboarding') ?? false;
-
-    Widget nextScreen;
-    if (hasSeenOnboarding) {
-      nextScreen = const HomeScreen();
-    } else {
-      nextScreen = const GetStartedScreen();
-    }
 
     if (!mounted) return;
 
     // Smooth fade + slight scale transition
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
+        pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = 0.92;
           const end = 1.0;

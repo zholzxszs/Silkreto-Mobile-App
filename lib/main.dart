@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/splash_screen.dart';
-import 'screens/get_started_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/scan_section.dart';
 import 'screens/upload_section.dart';
@@ -55,7 +54,6 @@ class MyApp extends StatelessWidget {
 
       routes: {
         '/splash': (context) => const SplashScreen(),
-        '/getStarted': (context) => const GetStartedScreen(),
         '/home': (context) => const HomeScreen(),
         '/scan': (context) => const ScanSection(),
         '/upload': (context) => const UploadSection(),
