@@ -14,45 +14,49 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _startAnimation();
-    _navigateToHome();
+    _runSplashSequence();
   }
 
-  void _startAnimation() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      setState(() {
-        _opacity = 1.0;
-      });
-    });
-  }
+  Future<void> _runSplashSequence() async {
+    // Fade IN (slower)
+    await Future.delayed(const Duration(milliseconds: 100));
+    if (!mounted) return;
+    setState(() => _opacity = 1.0);
 
-  Future<void> _navigateToHome() async {
-    // Give time for logo fade-in + pleasant short wait
-    await Future.delayed(const Duration(seconds: 3));
-
+    // Hold (longer, calmer)
+    await Future.delayed(const Duration(milliseconds: 1900));
     if (!mounted) return;
 
-    // Smooth fade + slight scale transition
+    // Fade OUT (gentler)
+    setState(() => _opacity = 0.0);
+
+    // Wait for fade-out
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = 0.92;
-          const end = 1.0;
-          const curve = Curves.easeOutCubic;
+        pageBuilder: (_, animation, __) => const HomeScreen(),
+        transitionDuration: const Duration(milliseconds: 800),
+        transitionsBuilder: (_, animation, __, child) {
+          final fade = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOut,
+          );
 
-          var tween = Tween(
-            begin: begin,
-            end: end,
-          ).chain(CurveTween(curve: curve));
-          var scaleAnimation = animation.drive(tween);
+          final slide =
+              Tween<Offset>(
+                begin: const Offset(0, 0.035), // smaller movement = smoother
+                end: Offset.zero,
+              ).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              );
 
           return FadeTransition(
-            opacity: animation,
-            child: ScaleTransition(scale: scaleAnimation, child: child),
+            opacity: fade,
+            child: SlideTransition(position: slide, child: child),
           );
         },
-        transitionDuration: const Duration(milliseconds: 700),
       ),
     );
   }
@@ -60,17 +64,20 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF63A361),
       body: AnimatedOpacity(
         opacity: _opacity,
-        duration: const Duration(milliseconds: 800),
-        curve: Curves.easeIn,
-        child: Image.asset(
-          'assets/silkreto-logo-bg.jpg',
-          fit: BoxFit.cover,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeInOut,
+        child: Container(
           width: double.infinity,
           height: double.infinity,
-          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage('assets/silkreto-logo-bg.jpg'),
+              fit: BoxFit.fitHeight, // ✅ less "zoom" than cover
+              alignment: Alignment.center,
+            ),
+          ),
         ),
       ),
     );
